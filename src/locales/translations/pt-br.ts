@@ -15,7 +15,7 @@ export const ptBR = {
   [tokens.auth.emailInvalid]: "Informe um e-mail valido.",
   [tokens.auth.emailRequired]: "Informe seu e-mail.",
   [tokens.auth.footer]:
-    "A autenticacao usa Supabase Auth. Os dados financeiros ficam ligados ao auth.users.id com regras RLS por usuario.",
+    "Suas informacoes ficam protegidas e cada conta acessa apenas os proprios dados financeiros.",
   [tokens.auth.intro]:
     "Acesse sua conta para acompanhar meses, temas e lancamentos.",
   [tokens.auth.login]: "Entrar",

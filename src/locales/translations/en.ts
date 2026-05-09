@@ -15,7 +15,7 @@ export const en = {
   [tokens.auth.emailInvalid]: "Enter a valid email.",
   [tokens.auth.emailRequired]: "Enter your email.",
   [tokens.auth.footer]:
-    "Authentication uses Supabase Auth. Financial data is linked to auth.users.id with per-user RLS rules.",
+    "Your information stays protected and each account can only access its own financial data.",
   [tokens.auth.intro]: "Access your account to track months, themes and entries.",
   [tokens.auth.login]: "Sign in",
   [tokens.auth.name]: "Name",
