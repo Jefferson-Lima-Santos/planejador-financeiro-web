@@ -38,11 +38,11 @@ import {
   TableHead,
   TableRow,
   Tabs,
-  TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
 import toast from "react-hot-toast";
+import { AppTextField, MoneyTextField } from "@/components/form-fields";
 import { AuthGuard } from "@/guards/auth-guard";
 import { DashboardLayout } from "@/layouts/dashboard-layout";
 import { useAuth } from "@/contexts/auth-context";
@@ -668,7 +668,7 @@ function FinancialDashboard() {
             <Typography color="text.secondary">
               O item continuara no historico e deixara de entrar no total do tema.
             </Typography>
-            <TextField
+            <AppTextField
               autoFocus
               fullWidth
               label="Motivo"
@@ -702,7 +702,7 @@ function FinancialDashboard() {
             <Typography color="text.secondary">
               O item continuara no historico e deixara de entrar no total do mes.
             </Typography>
-            <TextField
+            <AppTextField
               autoFocus
               fullWidth
               label="Motivo"
@@ -826,7 +826,7 @@ function IncomeDrawer({
                     {editingEntry ? "Editar receita" : "Nova receita"}
                   </Typography>
                   <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                    <TextField
+                    <AppTextField
                       fullWidth
                       label="Descricao"
                       onChange={(event) =>
@@ -836,17 +836,17 @@ function IncomeDrawer({
                       required
                       value={formValues.description}
                     />
-                    <TextField
+                    <MoneyTextField
                       label="Valor"
                       onChange={(event) =>
-                        onFormChange({ ...formValues, amount: event.target.value })
+                        onFormChange({ ...formValues, amount: event })
                       }
                       required
                       value={formValues.amount}
                     />
                   </Stack>
                   <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                    <TextField
+                    <AppTextField
                       fullWidth
                       label="Data"
                       onChange={(event) =>
@@ -856,7 +856,7 @@ function IncomeDrawer({
                       type="date"
                       value={formValues.entryDate}
                     />
-                    <TextField
+                    <AppTextField
                       fullWidth
                       label="Observacoes"
                       onChange={(event) =>
@@ -866,7 +866,7 @@ function IncomeDrawer({
                     />
                   </Stack>
                   {editingEntry ? (
-                    <TextField
+                    <AppTextField
                       fullWidth
                       label="Motivo da alteracao"
                       onChange={(event) =>
@@ -895,7 +895,7 @@ function IncomeDrawer({
                         label="Recorrente"
                       />
                       {formValues.isRecurring && (
-                        <TextField
+                        <AppTextField
                           fullWidth
                           helperText="Deixe em branco para repetir sem data final."
                           label="Repetir ate"
@@ -1080,7 +1080,7 @@ function EntryDrawer({
                     {editingEntry ? "Editar lancamento" : "Novo lancamento"}
                   </Typography>
                   <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                    <TextField
+                    <AppTextField
                       fullWidth
                       label="Descricao"
                       onChange={(event) =>
@@ -1089,17 +1089,17 @@ function EntryDrawer({
                       required
                       value={formValues.description}
                     />
-                    <TextField
+                    <MoneyTextField
                       label="Valor"
                       onChange={(event) =>
-                        onFormChange({ ...formValues, amount: event.target.value })
+                        onFormChange({ ...formValues, amount: event })
                       }
                       required
                       value={formValues.amount}
                     />
                   </Stack>
                   <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                    <TextField
+                    <AppTextField
                       fullWidth
                       label="Data"
                       onChange={(event) =>
@@ -1109,7 +1109,7 @@ function EntryDrawer({
                       type="date"
                       value={formValues.entryDate}
                     />
-                    <TextField
+                    <AppTextField
                       fullWidth
                       label="Observacoes"
                       onChange={(event) =>
@@ -1119,7 +1119,7 @@ function EntryDrawer({
                     />
                   </Stack>
                   {editingEntry ? (
-                    <TextField
+                    <AppTextField
                       fullWidth
                       label="Motivo da alteracao"
                       onChange={(event) =>
@@ -1148,7 +1148,7 @@ function EntryDrawer({
                         label="Recorrente"
                       />
                       {formValues.isRecurring && (
-                        <TextField
+                        <AppTextField
                           fullWidth
                           helperText="Deixe em branco para repetir sem data final."
                           label="Repetir ate"

@@ -5,18 +5,29 @@ export const centsToCurrency = (value: number): string =>
   }).format(value / 100);
 
 export const currencyInputToCents = (value: string): number => {
-  const normalized = value.replace(/\./g, "").replace(",", ".");
-  const parsed = Number(normalized);
+  const digits = value.replace(/\D/g, "");
 
-  if (Number.isNaN(parsed)) {
+  if (!digits) {
     return 0;
   }
 
-  return Math.round(parsed * 100);
+  return Number(digits);
 };
 
 export const centsToInputValue = (value: number): string =>
   (value / 100).toFixed(2).replace(".", ",");
+
+export const formatCurrencyInput = (value: string): string => {
+  const digits = value.replace(/\D/g, "");
+
+  if (!digits) {
+    return "";
+  }
+
+  const cents = Number(digits);
+
+  return centsToInputValue(cents);
+};
 
 export const basisPointsToPercentage = (value: number): string =>
   `${(value / 100).toLocaleString("pt-BR", {

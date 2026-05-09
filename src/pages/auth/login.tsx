@@ -21,11 +21,11 @@ import {
   Stack,
   Tab,
   Tabs,
-  TextField,
   Typography,
 } from "@mui/material";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
+import { AppTextField } from "@/components/form-fields";
 import { LanguageSwitch } from "@/components/language-switch";
 import { isSupabaseConfigured } from "@/config";
 import { useAuth } from "@/contexts/auth-context";
@@ -285,7 +285,7 @@ export default function LoginPage() {
               <Box component="form" onSubmit={handleSubmit} sx={{ mt: 3 }}>
                 <Stack spacing={2.5}>
                   {mode === "signUp" && (
-                    <TextField
+                    <AppTextField
                       autoComplete="name"
                       error={hasSubmitted && Boolean(errors.name)}
                       fullWidth
@@ -299,7 +299,7 @@ export default function LoginPage() {
                       value={name}
                     />
                   )}
-                  <TextField
+                  <AppTextField
                     autoComplete="email"
                     error={hasSubmitted && Boolean(errors.email)}
                     fullWidth
@@ -324,7 +324,7 @@ export default function LoginPage() {
                         : undefined
                     }
                   />
-                  <TextField
+                  <AppTextField
                     autoComplete={mode === "signIn" ? "current-password" : "new-password"}
                     error={hasSubmitted && Boolean(errors.password)}
                     fullWidth
@@ -339,7 +339,7 @@ export default function LoginPage() {
                     value={password}
                   />
                   {mode === "signUp" && (
-                    <TextField
+                    <AppTextField
                       autoComplete="new-password"
                       error={hasSubmitted && Boolean(errors.passwordConfirmation)}
                       fullWidth
