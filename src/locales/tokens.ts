@@ -1,0 +1,38 @@
+export const tokens = {
+  common: {
+    appName: "common.appName",
+    cancel: "common.cancel",
+    dashboard: "common.dashboard",
+    languageChanged: "common.languageChanged",
+    loading: "common.loading",
+    save: "common.save",
+  },
+  layout: {
+    language: "layout.language",
+    logout: "layout.logout",
+    monthlyControl: "layout.monthlyControl",
+  },
+  auth: {
+    createAccount: "auth.createAccount",
+    email: "auth.email",
+    emailInvalid: "auth.emailInvalid",
+    emailRequired: "auth.emailRequired",
+    footer: "auth.footer",
+    intro: "auth.intro",
+    login: "auth.login",
+    name: "auth.name",
+    nameRequired: "auth.nameRequired",
+    password: "auth.password",
+    passwordMin: "auth.passwordMin",
+    passwordRequired: "auth.passwordRequired",
+    signInSuccess: "auth.signInSuccess",
+    signUpSuccess: "auth.signUpSuccess",
+    subtitle: "auth.subtitle",
+    supabaseMissing: "auth.supabaseMissing",
+    title: "auth.title",
+    errors: {
+      invalidCredentials: "auth.errors.invalidCredentials",
+      generic: "auth.errors.generic",
+    },
+  },
+};

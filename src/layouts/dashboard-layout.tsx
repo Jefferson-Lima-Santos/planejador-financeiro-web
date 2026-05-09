@@ -19,7 +19,10 @@ import {
 } from "@mui/material";
 import { useRouter } from "next/router";
 import toast from "react-hot-toast";
+import { useTranslation } from "react-i18next";
+import { LanguageSwitch } from "@/components/language-switch";
 import { useAuth } from "@/contexts/auth-context";
+import { tokens } from "@/locales/tokens";
 
 type DashboardLayoutProps = {
   children: ReactNode;
@@ -28,13 +31,14 @@ type DashboardLayoutProps = {
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const router = useRouter();
   const { signOut, user } = useAuth();
+  const { t } = useTranslation();
 
   const handleSignOut = async () => {
     try {
       await signOut();
       router.replace("/auth/login");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao sair.");
+      toast.error(error instanceof Error ? error.message : t(tokens.auth.errors.generic));
     }
   };
 
@@ -55,9 +59,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               <AccountBalanceWalletOutlined />
             </Avatar>
             <Box>
-              <Typography variant="h6">Planejador Financeiro</Typography>
+              <Typography variant="h6">{t(tokens.common.appName)}</Typography>
               <Typography color="text.secondary" variant="body2">
-                Controle mensal
+                {t(tokens.layout.monthlyControl)}
               </Typography>
             </Box>
           </Stack>
@@ -75,8 +79,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               startIcon={<CalendarMonthOutlined />}
               sx={{ display: { xs: "none", sm: "inline-flex" } }}
             >
-              Dashboard
+              {t(tokens.common.dashboard)}
             </Button>
+            <LanguageSwitch />
             <Stack alignItems="center" direction="row" spacing={1}>
               <Avatar sx={{ height: 32, width: 32 }}>
                 {name.slice(0, 1).toUpperCase()}
@@ -88,8 +93,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               >
                 {name}
               </Typography>
-              <Tooltip title="Sair">
-                <IconButton aria-label="Sair" onClick={handleSignOut}>
+              <Tooltip title={t(tokens.layout.logout)}>
+                <IconButton aria-label={t(tokens.layout.logout)} onClick={handleSignOut}>
                   <LogoutOutlined />
                 </IconButton>
               </Tooltip>

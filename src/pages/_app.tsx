@@ -1,4 +1,5 @@
 import "@/styles/globals.css";
+import "@/locales/i18n";
 import type { AppProps } from "next/app";
 import Head from "next/head";
 import { CssBaseline, ThemeProvider } from "@mui/material";
