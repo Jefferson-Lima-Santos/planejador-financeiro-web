@@ -176,7 +176,8 @@ Se `visible_themes` vier `0` mas o select normal mostra linhas, o problema e RLS
 
 3. Se nao retornar nada, rode o seed:
 
-Rode o `schema.sql` (banco novo) ou execute o bloco de seed de temas que ja existe no final de `supabase/schema.sql`.
+- Banco novo: rode `supabase/schema.sql`.
+- Banco ja existente: rode `supabase/seed.sql`.
 
 4. Se os temas existem, mas `visible_themes` continua `0`, recrie a policy de leitura (o `schema.sql` ja contem isso):
 
@@ -191,25 +192,7 @@ create policy "budget_themes_read_active"
 
 5. Se no SQL Editor existe tema, mas no app nao aparece, verifique se o app esta apontando para o mesmo projeto Supabase (valores de `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_ANON_KEY` em `.env.local`).
 
-Observacao: os arquivos de "patch" (ex.: `add-income-entries.sql`) nao criam os temas; quem cria os temas iniciais e o `schema.sql` (ou o seed acima em bases existentes).
-
-## Patches SQL
-
-Se o banco ja existia antes das ultimas alteracoes, rode os patches conforme necessario:
-
-```text
-supabase/fix-rls-auth.sql
-supabase/add-income-entries.sql
-supabase/add-recurring-and-audit-reasons.sql
-```
-
-Ordem recomendada para bases antigas:
-
-1. `fix-rls-auth.sql`
-2. `add-income-entries.sql`
-3. `add-recurring-and-audit-reasons.sql`
-
-Para um banco zerado, apenas `schema.sql` deve bastar.
+Observacao: para este projeto, mantemos apenas `supabase/schema.sql` (estrutura + policies) e `supabase/seed.sql` (temas iniciais).
 
 ## Recorrencias
 
