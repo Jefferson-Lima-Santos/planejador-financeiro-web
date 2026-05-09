@@ -1,0 +1,106 @@
+import type { ReactNode } from "react";
+import {
+  AccountBalanceWalletOutlined,
+  CalendarMonthOutlined,
+  LogoutOutlined,
+} from "@mui/icons-material";
+import {
+  AppBar,
+  Avatar,
+  Box,
+  Button,
+  Container,
+  Divider,
+  IconButton,
+  Stack,
+  Toolbar,
+  Tooltip,
+  Typography,
+} from "@mui/material";
+import { useRouter } from "next/router";
+import toast from "react-hot-toast";
+import { useAuth } from "@/contexts/auth-context";
+
+type DashboardLayoutProps = {
+  children: ReactNode;
+};
+
+export function DashboardLayout({ children }: DashboardLayoutProps) {
+  const router = useRouter();
+  const { signOut, user } = useAuth();
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      router.replace("/auth/login");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao sair.");
+    }
+  };
+
+  const name =
+    user?.user_metadata?.name || user?.email?.split("@")[0] || "Usuario";
+
+  return (
+    <Box sx={{ minHeight: "100vh" }}>
+      <AppBar
+        color="inherit"
+        elevation={0}
+        position="sticky"
+        sx={{ borderBottom: "1px solid", borderColor: "divider" }}
+      >
+        <Toolbar sx={{ minHeight: 68 }}>
+          <Stack alignItems="center" direction="row" spacing={1.5}>
+            <Avatar sx={{ bgcolor: "primary.main" }}>
+              <AccountBalanceWalletOutlined />
+            </Avatar>
+            <Box>
+              <Typography variant="h6">Planejador Financeiro</Typography>
+              <Typography color="text.secondary" variant="body2">
+                Controle mensal
+              </Typography>
+            </Box>
+          </Stack>
+
+          <Box sx={{ flexGrow: 1 }} />
+
+          <Stack
+            alignItems="center"
+            direction="row"
+            divider={<Divider flexItem orientation="vertical" />}
+            spacing={2}
+          >
+            <Button
+              color="inherit"
+              startIcon={<CalendarMonthOutlined />}
+              sx={{ display: { xs: "none", sm: "inline-flex" } }}
+            >
+              Dashboard
+            </Button>
+            <Stack alignItems="center" direction="row" spacing={1}>
+              <Avatar sx={{ height: 32, width: 32 }}>
+                {name.slice(0, 1).toUpperCase()}
+              </Avatar>
+              <Typography
+                sx={{ display: { xs: "none", md: "block" }, maxWidth: 160 }}
+                noWrap
+                variant="body2"
+              >
+                {name}
+              </Typography>
+              <Tooltip title="Sair">
+                <IconButton aria-label="Sair" onClick={handleSignOut}>
+                  <LogoutOutlined />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+          </Stack>
+        </Toolbar>
+      </AppBar>
+
+      <Container maxWidth="xl" sx={{ py: 4 }}>
+        {children}
+      </Container>
+    </Box>
+  );
+}
