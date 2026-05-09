@@ -147,6 +147,52 @@ Esse arquivo cria:
 - triggers de auditoria
 - seeds dos temas financeiros
 
+### Se aparecer "Nenhum tema encontrado"
+
+Essa mensagem significa que a aplicacao nao encontrou registros em `budget_themes`.
+
+1. No Supabase, rode a consulta:
+
+```sql
+select id, name, sort_order, deleted_at
+from public.budget_themes
+order by sort_order asc, name asc;
+```
+
+2. Confirme se a API (role `anon`) enxerga os temas (isso simula o que o app usa):
+
+```sql
+begin;
+set local role anon;
+
+select count(*) as visible_themes
+from public.budget_themes
+where deleted_at is null;
+
+rollback;
+```
+
+Se `visible_themes` vier `0` mas o select normal mostra linhas, o problema e RLS/policy.
+
+3. Se nao retornar nada, rode o seed:
+
+Rode o `schema.sql` (banco novo) ou execute o bloco de seed de temas que ja existe no final de `supabase/schema.sql`.
+
+4. Se os temas existem, mas `visible_themes` continua `0`, recrie a policy de leitura (o `schema.sql` ja contem isso):
+
+```sql
+alter table public.budget_themes enable row level security;
+
+drop policy if exists "budget_themes_read_active" on public.budget_themes;
+create policy "budget_themes_read_active"
+  on public.budget_themes for select
+  using (deleted_at is null);
+```
+
+5. Se no SQL Editor existe tema, mas no app nao aparece, verifique se o app esta apontando para o mesmo projeto Supabase (valores de `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_ANON_KEY` em `.env.local`).
+
+Observacao: os arquivos de "patch" (ex.: `add-income-entries.sql`) nao criam os temas; quem cria os temas iniciais e o `schema.sql` (ou o seed acima em bases existentes).
+
 ## Patches SQL
 
 Se o banco ja existia antes das ultimas alteracoes, rode os patches conforme necessario:
