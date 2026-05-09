@@ -25,6 +25,42 @@ const requireAuthenticatedUserId = async (): Promise<string> => {
   return data.user.id;
 };
 
+const getYearMonth = (date: string): { year: number; month: number } => {
+  const value = new Date(`${date}T00:00:00`);
+
+  return {
+    month: value.getMonth() + 1,
+    year: value.getFullYear(),
+  };
+};
+
+const getDayOfMonth = (date: string): number =>
+  new Date(`${date}T00:00:00`).getDate();
+
+const getDateInMonth = (year: number, month: number, day: number): string => {
+  const lastDay = new Date(year, month, 0).getDate();
+  const safeDay = Math.min(day, lastDay);
+  const safeMonth = String(month).padStart(2, "0");
+  const safeDayText = String(safeDay).padStart(2, "0");
+
+  return `${year}-${safeMonth}-${safeDayText}`;
+};
+
+const isMonthInRange = (
+  year: number,
+  month: number,
+  startYear: number,
+  startMonth: number,
+  endYear: number | null,
+  endMonth: number | null
+): boolean => {
+  const value = year * 12 + month;
+  const start = startYear * 12 + startMonth;
+  const end = endYear && endMonth ? endYear * 12 + endMonth : null;
+
+  return value >= start && (end === null || value <= end);
+};
+
 export async function ensureBudgetMonth(
   userId: string,
   year: number,
@@ -66,6 +102,96 @@ export async function ensureBudgetMonth(
   }
 
   return data as BudgetMonth;
+}
+
+export async function materializeRecurringEntries(
+  budgetMonthId: string,
+  year: number,
+  month: number
+): Promise<void> {
+  const client = requireSupabase();
+  const authenticatedUserId = await requireAuthenticatedUserId();
+
+  const { data: recurringRows, error } = await client
+    .from("recurring_entries")
+    .select("*")
+    .eq("user_id", authenticatedUserId)
+    .is("deleted_at", null);
+
+  if (error) {
+    throw error;
+  }
+
+  for (const recurring of recurringRows ?? []) {
+    if (
+      !isMonthInRange(
+        year,
+        month,
+        recurring.start_year,
+        recurring.start_month,
+        recurring.end_year,
+        recurring.end_month
+      )
+    ) {
+      continue;
+    }
+
+    const tableName =
+      recurring.entry_type === "income"
+        ? "monthly_income_entries"
+        : "monthly_theme_entries";
+    const { data: existing, error: existingError } = await client
+      .from(tableName)
+      .select("id")
+      .eq("budget_month_id", budgetMonthId)
+      .eq("recurring_entry_id", recurring.id)
+      .maybeSingle();
+
+    if (existingError) {
+      throw existingError;
+    }
+
+    if (existing) {
+      continue;
+    }
+
+    const entryDate = getDateInMonth(year, month, recurring.entry_day);
+
+    if (recurring.entry_type === "income") {
+      const { error: insertError } = await client
+        .from("monthly_income_entries")
+        .insert({
+          amount_cents: recurring.amount_cents,
+          budget_month_id: budgetMonthId,
+          description: recurring.description,
+          notes: recurring.notes,
+          received_date: entryDate,
+          recurring_entry_id: recurring.id,
+          user_id: authenticatedUserId,
+        });
+
+      if (insertError) {
+        throw insertError;
+      }
+    } else {
+      const { error: insertError } = await client
+        .from("monthly_theme_entries")
+        .insert({
+          amount_cents: recurring.amount_cents,
+          budget_month_id: budgetMonthId,
+          description: recurring.description,
+          entry_date: entryDate,
+          notes: recurring.notes,
+          recurring_entry_id: recurring.id,
+          theme_id: recurring.theme_id,
+          user_id: authenticatedUserId,
+        });
+
+      if (insertError) {
+        throw insertError;
+      }
+    }
+  }
 }
 
 export async function listBudgetThemes(): Promise<BudgetTheme[]> {
@@ -128,13 +254,46 @@ export async function createIncomeEntry(input: {
   amountCents: number;
   receivedDate: string;
   notes?: string;
+  isRecurring?: boolean;
+  recurrenceEndDate?: string;
 }): Promise<void> {
   const client = requireSupabase();
   const authenticatedUserId = await requireAuthenticatedUserId();
+  let recurringEntryId: string | null = null;
+
+  if (input.isRecurring) {
+    const start = getYearMonth(input.receivedDate);
+    const end = input.recurrenceEndDate
+      ? getYearMonth(input.recurrenceEndDate)
+      : null;
+    const { data, error } = await client
+      .from("recurring_entries")
+      .insert({
+        amount_cents: input.amountCents,
+        description: input.description,
+        end_month: end?.month ?? null,
+        end_year: end?.year ?? null,
+        entry_day: getDayOfMonth(input.receivedDate),
+        entry_type: "income",
+        notes: input.notes || null,
+        start_month: start.month,
+        start_year: start.year,
+        user_id: authenticatedUserId,
+      })
+      .select("id")
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    recurringEntryId = data.id;
+  }
 
   const { error } = await client.from("monthly_income_entries").insert({
     user_id: authenticatedUserId,
     budget_month_id: input.budgetMonthId,
+    recurring_entry_id: recurringEntryId,
     description: input.description,
     amount_cents: input.amountCents,
     received_date: input.receivedDate,
@@ -152,6 +311,7 @@ export async function updateIncomeEntry(input: {
   amountCents: number;
   receivedDate: string;
   notes?: string;
+  changeReason?: string;
 }): Promise<void> {
   const client = requireSupabase();
 
@@ -160,6 +320,7 @@ export async function updateIncomeEntry(input: {
     .update({
       description: input.description,
       amount_cents: input.amountCents,
+      change_reason: input.changeReason || null,
       received_date: input.receivedDate,
       notes: input.notes || null,
       updated_at: new Date().toISOString(),
@@ -217,14 +378,48 @@ export async function createEntry(input: {
   amountCents: number;
   entryDate: string;
   notes?: string;
+  isRecurring?: boolean;
+  recurrenceEndDate?: string;
 }): Promise<void> {
   const client = requireSupabase();
   const authenticatedUserId = await requireAuthenticatedUserId();
+  let recurringEntryId: string | null = null;
+
+  if (input.isRecurring) {
+    const start = getYearMonth(input.entryDate);
+    const end = input.recurrenceEndDate
+      ? getYearMonth(input.recurrenceEndDate)
+      : null;
+    const { data, error } = await client
+      .from("recurring_entries")
+      .insert({
+        amount_cents: input.amountCents,
+        description: input.description,
+        end_month: end?.month ?? null,
+        end_year: end?.year ?? null,
+        entry_day: getDayOfMonth(input.entryDate),
+        entry_type: "expense",
+        notes: input.notes || null,
+        start_month: start.month,
+        start_year: start.year,
+        theme_id: input.themeId,
+        user_id: authenticatedUserId,
+      })
+      .select("id")
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    recurringEntryId = data.id;
+  }
 
   const { error } = await client.from("monthly_theme_entries").insert({
     user_id: authenticatedUserId,
     budget_month_id: input.budgetMonthId,
     theme_id: input.themeId,
+    recurring_entry_id: recurringEntryId,
     description: input.description,
     amount_cents: input.amountCents,
     entry_date: input.entryDate,
@@ -242,6 +437,7 @@ export async function updateEntry(input: {
   amountCents: number;
   entryDate: string;
   notes?: string;
+  changeReason?: string;
 }): Promise<void> {
   const client = requireSupabase();
 
@@ -250,6 +446,7 @@ export async function updateEntry(input: {
     .update({
       description: input.description,
       amount_cents: input.amountCents,
+      change_reason: input.changeReason || null,
       entry_date: input.entryDate,
       notes: input.notes || null,
       updated_at: new Date().toISOString(),

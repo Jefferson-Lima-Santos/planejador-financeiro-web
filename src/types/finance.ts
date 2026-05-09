@@ -22,10 +22,12 @@ export type MonthlyThemeEntry = {
   user_id: string;
   budget_month_id: string;
   theme_id: string;
+  recurring_entry_id: string | null;
   description: string;
   amount_cents: number;
   entry_date: string;
   notes: string | null;
+  change_reason: string | null;
   created_at: string;
   updated_at: string | null;
   deleted_at: string | null;
@@ -36,10 +38,12 @@ export type MonthlyIncomeEntry = {
   id: string;
   user_id: string;
   budget_month_id: string;
+  recurring_entry_id: string | null;
   description: string;
   amount_cents: number;
   received_date: string;
   notes: string | null;
+  change_reason: string | null;
   created_at: string;
   updated_at: string | null;
   deleted_at: string | null;
@@ -57,4 +61,7 @@ export type EntryFormValues = {
   amount: string;
   entryDate: string;
   notes: string;
+  isRecurring: boolean;
+  recurrenceEndDate: string;
+  changeReason: string;
 };

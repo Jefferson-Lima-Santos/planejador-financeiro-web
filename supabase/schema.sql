@@ -28,10 +28,12 @@ create table if not exists public.monthly_income_entries (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   budget_month_id uuid not null references public.budget_months(id) on delete cascade,
+  recurring_entry_id uuid,
   description text not null,
   amount_cents integer not null check (amount_cents >= 0),
   received_date date not null,
   notes text,
+  change_reason text,
   created_at timestamptz not null default now(),
   updated_at timestamptz,
   deleted_at timestamptz,
@@ -43,6 +45,25 @@ create index if not exists idx_monthly_income_entries_month
 
 create index if not exists idx_monthly_income_entries_user_active
   on public.monthly_income_entries(user_id, deleted_at);
+
+create table if not exists public.recurring_entries (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  entry_type text not null check (entry_type in ('income', 'expense')),
+  theme_id uuid,
+  description text not null,
+  amount_cents integer not null check (amount_cents >= 0),
+  entry_day integer not null check (entry_day between 1 and 31),
+  start_year integer not null,
+  start_month integer not null check (start_month between 1 and 12),
+  end_year integer,
+  end_month integer check (end_month between 1 and 12),
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz,
+  deleted_at timestamptz,
+  deleted_reason text
+);
 
 create table if not exists public.budget_themes (
   id uuid primary key default gen_random_uuid(),
@@ -64,10 +85,12 @@ create table if not exists public.monthly_theme_entries (
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   budget_month_id uuid not null references public.budget_months(id) on delete cascade,
   theme_id uuid not null references public.budget_themes(id),
+  recurring_entry_id uuid,
   description text not null,
   amount_cents integer not null check (amount_cents >= 0),
   entry_date date not null,
   notes text,
+  change_reason text,
   created_at timestamptz not null default now(),
   updated_at timestamptz,
   deleted_at timestamptz,
@@ -99,6 +122,7 @@ create table if not exists public.audit_logs (
   table_name text not null,
   record_id uuid not null,
   action text not null check (action in ('INSERT', 'UPDATE', 'SOFT_DELETE', 'RESTORE', 'DELETE')),
+  reason text,
   old_values jsonb,
   new_values jsonb,
   created_at timestamptz not null default now()
@@ -108,14 +132,21 @@ alter table public.profiles enable row level security;
 alter table public.budget_months enable row level security;
 alter table public.monthly_income_entries enable row level security;
 alter table public.budget_themes enable row level security;
+alter table public.recurring_entries enable row level security;
 alter table public.monthly_theme_entries enable row level security;
 alter table public.goals enable row level security;
 alter table public.audit_logs enable row level security;
 
 alter table public.budget_months alter column user_id set default auth.uid();
 alter table public.monthly_income_entries alter column user_id set default auth.uid();
+alter table public.monthly_income_entries add column if not exists recurring_entry_id uuid;
+alter table public.monthly_income_entries add column if not exists change_reason text;
+alter table public.recurring_entries alter column user_id set default auth.uid();
 alter table public.monthly_theme_entries alter column user_id set default auth.uid();
+alter table public.monthly_theme_entries add column if not exists recurring_entry_id uuid;
+alter table public.monthly_theme_entries add column if not exists change_reason text;
 alter table public.goals alter column user_id set default auth.uid();
+alter table public.audit_logs add column if not exists reason text;
 
 drop policy if exists "profiles_select_own" on public.profiles;
 create policy "profiles_select_own"
@@ -153,6 +184,12 @@ drop policy if exists "budget_themes_read_active" on public.budget_themes;
 create policy "budget_themes_read_active"
   on public.budget_themes for select
   using (deleted_at is null);
+
+drop policy if exists "recurring_entries_manage_own" on public.recurring_entries;
+create policy "recurring_entries_manage_own"
+  on public.recurring_entries for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
 
 drop policy if exists "monthly_theme_entries_manage_own" on public.monthly_theme_entries;
 create policy "monthly_theme_entries_manage_own"
@@ -210,14 +247,17 @@ declare
   action_name text;
   actor_id uuid;
   row_id uuid;
+  reason_text text;
 begin
   if tg_op = 'INSERT' then
     action_name := 'INSERT';
     actor_id := coalesce((to_jsonb(new)->>'user_id')::uuid, auth.uid());
     row_id := new.id;
 
-    insert into public.audit_logs (user_id, table_name, record_id, action, old_values, new_values)
-    values (actor_id, tg_table_name, row_id, action_name, null, to_jsonb(new));
+    reason_text := coalesce(to_jsonb(new)->>'change_reason', to_jsonb(new)->>'deleted_reason');
+
+    insert into public.audit_logs (user_id, table_name, record_id, action, reason, old_values, new_values)
+    values (actor_id, tg_table_name, row_id, action_name, reason_text, null, to_jsonb(new));
 
     return new;
   end if;
@@ -233,9 +273,10 @@ begin
 
     actor_id := coalesce((to_jsonb(new)->>'user_id')::uuid, auth.uid());
     row_id := new.id;
+    reason_text := coalesce(to_jsonb(new)->>'change_reason', to_jsonb(new)->>'deleted_reason');
 
-    insert into public.audit_logs (user_id, table_name, record_id, action, old_values, new_values)
-    values (actor_id, tg_table_name, row_id, action_name, to_jsonb(old), to_jsonb(new));
+    insert into public.audit_logs (user_id, table_name, record_id, action, reason, old_values, new_values)
+    values (actor_id, tg_table_name, row_id, action_name, reason_text, to_jsonb(old), to_jsonb(new));
 
     return new;
   end if;
@@ -244,8 +285,10 @@ begin
   actor_id := coalesce((to_jsonb(old)->>'user_id')::uuid, auth.uid());
   row_id := old.id;
 
-  insert into public.audit_logs (user_id, table_name, record_id, action, old_values, new_values)
-  values (actor_id, tg_table_name, row_id, action_name, to_jsonb(old), null);
+  reason_text := coalesce(to_jsonb(old)->>'change_reason', to_jsonb(old)->>'deleted_reason');
+
+  insert into public.audit_logs (user_id, table_name, record_id, action, reason, old_values, new_values)
+  values (actor_id, tg_table_name, row_id, action_name, reason_text, to_jsonb(old), null);
 
   return old;
 end;
@@ -259,6 +302,11 @@ create trigger audit_budget_months
 drop trigger if exists audit_monthly_income_entries on public.monthly_income_entries;
 create trigger audit_monthly_income_entries
   after insert or update or delete on public.monthly_income_entries
+  for each row execute function public.audit_row_changes();
+
+drop trigger if exists audit_recurring_entries on public.recurring_entries;
+create trigger audit_recurring_entries
+  after insert or update or delete on public.recurring_entries
   for each row execute function public.audit_row_changes();
 
 drop trigger if exists audit_monthly_theme_entries on public.monthly_theme_entries;

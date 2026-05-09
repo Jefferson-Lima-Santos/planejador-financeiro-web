@@ -18,6 +18,7 @@ import {
   Button,
   Card,
   CardContent,
+  Checkbox,
   Chip,
   CircularProgress,
   Dialog,
@@ -26,6 +27,7 @@ import {
   DialogTitle,
   Divider,
   Drawer,
+  FormControlLabel,
   IconButton,
   LinearProgress,
   Stack,
@@ -51,6 +53,7 @@ import {
   listBudgetThemes,
   listMonthIncomeEntries,
   listMonthEntries,
+  materializeRecurringEntries,
   restoreIncomeEntry,
   restoreEntry,
   softDeleteIncomeEntry,
@@ -77,17 +80,23 @@ dayjs.locale("pt-br");
 
 const emptyEntryForm = (themeId = ""): EntryFormValues & { themeId: string } => ({
   amount: "",
+  changeReason: "",
   description: "",
   entryDate: dayjs().format("YYYY-MM-DD"),
+  isRecurring: false,
   notes: "",
+  recurrenceEndDate: "",
   themeId,
 });
 
 const emptyIncomeForm = (): EntryFormValues => ({
   amount: "",
+  changeReason: "",
   description: "",
   entryDate: dayjs().format("YYYY-MM-DD"),
+  isRecurring: false,
   notes: "",
+  recurrenceEndDate: "",
 });
 
 export default function DashboardPage() {
@@ -133,6 +142,11 @@ function FinancialDashboard() {
     try {
       const month = await ensureBudgetMonth(
         user.id,
+        currentMonth.year(),
+        currentMonth.month() + 1
+      );
+      await materializeRecurringEntries(
+        month.id,
         currentMonth.year(),
         currentMonth.month() + 1
       );
@@ -229,9 +243,12 @@ function FinancialDashboard() {
     setEditingIncomeEntry(entry);
     setIncomeFormValues({
       amount: centsToInputValue(entry.amount_cents),
+      changeReason: "",
       description: entry.description,
       entryDate: entry.received_date,
+      isRecurring: false,
       notes: entry.notes ?? "",
+      recurrenceEndDate: "",
     });
   };
 
@@ -250,6 +267,7 @@ function FinancialDashboard() {
       if (editingIncomeEntry) {
         await updateIncomeEntry({
           amountCents,
+          changeReason: incomeFormValues.changeReason,
           description: incomeFormValues.description,
           entryId: editingIncomeEntry.id,
           notes: incomeFormValues.notes,
@@ -261,8 +279,10 @@ function FinancialDashboard() {
           amountCents,
           budgetMonthId: budgetMonth.id,
           description: incomeFormValues.description,
+          isRecurring: incomeFormValues.isRecurring,
           notes: incomeFormValues.notes,
           receivedDate: incomeFormValues.entryDate,
+          recurrenceEndDate: incomeFormValues.recurrenceEndDate,
         });
         toast.success("Receita adicionada.");
       }
@@ -281,9 +301,12 @@ function FinancialDashboard() {
     setEditingEntry(entry);
     setFormValues({
       amount: centsToInputValue(entry.amount_cents),
+      changeReason: "",
       description: entry.description,
       entryDate: entry.entry_date,
+      isRecurring: false,
       notes: entry.notes ?? "",
+      recurrenceEndDate: "",
       themeId: entry.theme_id,
     });
   };
@@ -303,6 +326,7 @@ function FinancialDashboard() {
       if (editingEntry) {
         await updateEntry({
           amountCents,
+          changeReason: formValues.changeReason,
           description: formValues.description,
           entryDate: formValues.entryDate,
           entryId: editingEntry.id,
@@ -315,7 +339,9 @@ function FinancialDashboard() {
           budgetMonthId: budgetMonth.id,
           description: formValues.description,
           entryDate: formValues.entryDate,
+          isRecurring: formValues.isRecurring,
           notes: formValues.notes,
+          recurrenceEndDate: formValues.recurrenceEndDate,
           themeId: selectedTheme.id,
           userId: user.id,
         });
@@ -839,6 +865,52 @@ function IncomeDrawer({
                       value={formValues.notes}
                     />
                   </Stack>
+                  {editingEntry ? (
+                    <TextField
+                      fullWidth
+                      label="Motivo da alteracao"
+                      onChange={(event) =>
+                        onFormChange({
+                          ...formValues,
+                          changeReason: event.target.value,
+                        })
+                      }
+                      placeholder="Opcional"
+                      value={formValues.changeReason}
+                    />
+                  ) : (
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            checked={formValues.isRecurring}
+                            onChange={(event) =>
+                              onFormChange({
+                                ...formValues,
+                                isRecurring: event.target.checked,
+                              })
+                            }
+                          />
+                        }
+                        label="Recorrente"
+                      />
+                      {formValues.isRecurring && (
+                        <TextField
+                          fullWidth
+                          helperText="Deixe em branco para repetir sem data final."
+                          label="Repetir ate"
+                          onChange={(event) =>
+                            onFormChange({
+                              ...formValues,
+                              recurrenceEndDate: event.target.value,
+                            })
+                          }
+                          type="date"
+                          value={formValues.recurrenceEndDate}
+                        />
+                      )}
+                    </Stack>
+                  )}
                   <Stack direction="row" justifyContent="flex-end" spacing={1}>
                     {editingEntry && <Button onClick={onCancelEdit}>Limpar</Button>}
                     <Button
@@ -1046,6 +1118,52 @@ function EntryDrawer({
                       value={formValues.notes}
                     />
                   </Stack>
+                  {editingEntry ? (
+                    <TextField
+                      fullWidth
+                      label="Motivo da alteracao"
+                      onChange={(event) =>
+                        onFormChange({
+                          ...formValues,
+                          changeReason: event.target.value,
+                        })
+                      }
+                      placeholder="Opcional"
+                      value={formValues.changeReason}
+                    />
+                  ) : (
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            checked={formValues.isRecurring}
+                            onChange={(event) =>
+                              onFormChange({
+                                ...formValues,
+                                isRecurring: event.target.checked,
+                              })
+                            }
+                          />
+                        }
+                        label="Recorrente"
+                      />
+                      {formValues.isRecurring && (
+                        <TextField
+                          fullWidth
+                          helperText="Deixe em branco para repetir sem data final."
+                          label="Repetir ate"
+                          onChange={(event) =>
+                            onFormChange({
+                              ...formValues,
+                              recurrenceEndDate: event.target.value,
+                            })
+                          }
+                          type="date"
+                          value={formValues.recurrenceEndDate}
+                        />
+                      )}
+                    </Stack>
+                  )}
                   <Stack direction="row" justifyContent="flex-end" spacing={1}>
                     {editingEntry && (
                       <Button onClick={onCancelEdit}>Limpar</Button>
