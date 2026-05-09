@@ -42,6 +42,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const name =
     user?.user_metadata?.name || user?.email?.split("@")[0] || "Usuário";
+  const initials = name.slice(0, 1).toUpperCase();
 
   return (
     <Box sx={{ minHeight: "100vh" }}>
@@ -51,11 +52,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         position="sticky"
         sx={{ borderBottom: "1px solid", borderColor: "divider" }}
       >
-        <Toolbar sx={{ minHeight: 68 }}>
+        <Toolbar
+          sx={{
+            gap: { xs: 1, sm: 2 },
+            minHeight: { xs: 60, sm: 68 },
+            px: { xs: 1.5, sm: 3 },
+          }}
+        >
           <Stack
             alignItems="center"
             direction="row"
-            spacing={1.5}
+            spacing={{ xs: 1, sm: 1.5 }}
             onClick={() => router.push("/dashboard")}
             role="button"
             tabIndex={0}
@@ -67,12 +74,29 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             }}
             sx={{ cursor: "pointer" }}
           >
-            <Avatar sx={{ bgcolor: "primary.main" }}>
+            <Avatar
+              sx={{
+                bgcolor: "primary.main",
+                height: { xs: 38, sm: 40 },
+                width: { xs: 38, sm: 40 },
+              }}
+            >
               <AccountBalanceWalletOutlined />
             </Avatar>
-            <Box>
-              <Typography variant="h6">{t(tokens.common.appName)}</Typography>
-              <Typography color="text.secondary" variant="body2">
+            <Box sx={{ minWidth: 0 }}>
+              <Typography
+                noWrap
+                sx={{ fontSize: { xs: 16, sm: 20 }, lineHeight: 1.15 }}
+                variant="h6"
+              >
+                {t(tokens.common.appName)}
+              </Typography>
+              <Typography
+                color="text.secondary"
+                noWrap
+                sx={{ display: { xs: "none", sm: "block" } }}
+                variant="body2"
+              >
                 {t(tokens.layout.monthlyControl)}
               </Typography>
             </Box>
@@ -84,12 +108,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             alignItems="center"
             direction="row"
             divider={<Divider flexItem orientation="vertical" />}
-            spacing={2}
+            spacing={{ xs: 1, sm: 2 }}
+            sx={{ flexShrink: 0 }}
           >
             <LanguageSwitch />
             <Stack alignItems="center" direction="row" spacing={1}>
-              <Avatar sx={{ height: 32, width: 32 }}>
-                {name.slice(0, 1).toUpperCase()}
+              <Avatar sx={{ height: { xs: 30, sm: 32 }, width: { xs: 30, sm: 32 } }}>
+                {initials}
               </Avatar>
               <Typography
                 sx={{ display: { xs: "none", md: "block" }, maxWidth: 160 }}
@@ -108,7 +133,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         </Toolbar>
       </AppBar>
 
-      <Container maxWidth="xl" sx={{ py: 4 }}>
+      <Container maxWidth="xl" sx={{ px: { xs: 2, sm: 3 }, py: { xs: 2.5, sm: 4 } }}>
         {children}
       </Container>
     </Box>

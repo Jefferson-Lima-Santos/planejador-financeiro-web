@@ -50,6 +50,8 @@ export function LanguageSwitch() {
             border: "1px solid",
             borderColor: "divider",
             bgcolor: "background.paper",
+            height: { xs: 38, sm: 40 },
+            width: { xs: 38, sm: 40 },
             transition: "transform 160ms ease, box-shadow 160ms ease",
             "&:hover": {
               boxShadow: "0 10px 20px rgba(15, 23, 42, 0.14)",
@@ -61,7 +63,11 @@ export function LanguageSwitch() {
             alt={currentOption.label}
             component="img"
             src={currentOption.flag}
-            sx={{ borderRadius: "50%", height: 24, width: 24 }}
+            sx={{
+              borderRadius: "50%",
+              height: { xs: 22, sm: 24 },
+              width: { xs: 22, sm: 24 },
+            }}
           />
         </IconButton>
       </Tooltip>

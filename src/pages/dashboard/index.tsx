@@ -6,6 +6,7 @@ import {
   AddOutlined,
   ArrowBackIosNewOutlined,
   ArrowForwardIosOutlined,
+  CloseOutlined,
   DeleteOutlineOutlined,
   EditOutlined,
   HistoryOutlined,
@@ -40,6 +41,7 @@ import {
   Tabs,
   Tooltip,
   Typography,
+  useMediaQuery,
 } from "@mui/material";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
@@ -135,10 +137,12 @@ export default function DashboardPage() {
 
 function FinancialDashboard() {
   const { user } = useAuth();
-  const { i18n, t } = useTranslation();
+  const { t } = useTranslation();
+  const isMobile = useMediaQuery("(max-width:600px)");
   const userId = user?.id ?? null;
   const tokenRefreshTick = useRecoilValue(authTokenRefreshTickAtom);
   const expensesSectionRef = useRef<HTMLDivElement | null>(null);
+  const lastLoadedRef = useRef<{ key: string; tokenTick: number } | null>(null);
   const [currentMonth, setCurrentMonth] = useState<Dayjs>(dayjs().startOf("month"));
   const [budgetMonth, setBudgetMonth] = useState<BudgetMonth | null>(null);
   const [comparisons, setComparisons] = useState<MonthlyComparison[]>([]);
@@ -200,14 +204,26 @@ function FinancialDashboard() {
       setIncomeEntries(incomeRows);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : i18n.t(tokens.dashboard.loadDataError)
+        error instanceof Error ? error.message : "Erro ao carregar dados."
       );
     } finally {
       setIsLoading(false);
     }
-  }, [currentMonth, i18n, userId]);
+  }, [currentMonth, userId]);
 
   useEffect(() => {
+    if (!userId) {
+      return;
+    }
+
+    const monthKey = `${userId}:${currentMonth.year()}-${currentMonth.month() + 1}`;
+    const lastLoaded = lastLoadedRef.current;
+
+    if (lastLoaded?.key === monthKey && lastLoaded.tokenTick === tokenRefreshTick) {
+      return;
+    }
+
+    lastLoadedRef.current = { key: monthKey, tokenTick: tokenRefreshTick };
     loadMonth();
   }, [loadMonth, tokenRefreshTick]);
 
@@ -320,11 +336,11 @@ function FinancialDashboard() {
       )
       .catch((error) => {
         toast.error(
-          error instanceof Error ? error.message : t(tokens.dashboard.loadDataError)
+          error instanceof Error ? error.message : "Erro ao carregar dados."
         );
       })
       .finally(() => setIncomeAuditLoading(false));
-  }, [editingIncomeEntry, incomeEditDialogOpen, t, tokenRefreshTick]);
+  }, [editingIncomeEntry, incomeEditDialogOpen, tokenRefreshTick]);
 
   const handleSubmitIncomeEntry = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -431,11 +447,11 @@ function FinancialDashboard() {
       )
       .catch((error) => {
         toast.error(
-          error instanceof Error ? error.message : t(tokens.dashboard.loadDataError)
+          error instanceof Error ? error.message : "Erro ao carregar dados."
         );
       })
       .finally(() => setExpenseAuditLoading(false));
-  }, [editingEntry, expenseEditDialogOpen, t, tokenRefreshTick]);
+  }, [editingEntry, expenseEditDialogOpen, tokenRefreshTick]);
 
   const handleSubmitEntry = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -965,11 +981,33 @@ function FinancialDashboard() {
 
       <Dialog
         fullWidth
+        fullScreen={isMobile}
         maxWidth="md"
         onClose={handleCloseExpenseEditDialog}
         open={expenseEditDialogOpen && Boolean(editingEntry)}
       >
-        <DialogTitle>{t(tokens.dashboard.editExpense)}</DialogTitle>
+        <DialogTitle sx={{ pb: 1 }}>
+          <Stack alignItems="center" direction="row" spacing={1}>
+            <IconButton
+              aria-label={t(tokens.common.back)}
+              edge="start"
+              onClick={handleCloseExpenseEditDialog}
+              sx={{ display: { xs: "inline-flex", sm: "none" } }}
+            >
+              <ArrowBackIosNewOutlined fontSize="small" />
+            </IconButton>
+            <Typography sx={{ flexGrow: 1 }} variant="h3">
+              {t(tokens.dashboard.editExpense)}
+            </Typography>
+            <IconButton
+              aria-label={t(tokens.common.cancel)}
+              onClick={handleCloseExpenseEditDialog}
+              sx={{ display: { xs: "none", sm: "inline-flex" } }}
+            >
+              <CloseOutlined />
+            </IconButton>
+          </Stack>
+        </DialogTitle>
         <DialogContent>
           <Stack spacing={3} sx={{ pt: 1 }}>
             <Box component="form" onSubmit={handleSubmitEntry}>
@@ -1087,11 +1125,33 @@ function FinancialDashboard() {
 
       <Dialog
         fullWidth
+        fullScreen={isMobile}
         maxWidth="md"
         onClose={handleCloseIncomeEditDialog}
         open={incomeEditDialogOpen && Boolean(editingIncomeEntry)}
       >
-        <DialogTitle>{t(tokens.dashboard.editIncome)}</DialogTitle>
+        <DialogTitle sx={{ pb: 1 }}>
+          <Stack alignItems="center" direction="row" spacing={1}>
+            <IconButton
+              aria-label={t(tokens.common.back)}
+              edge="start"
+              onClick={handleCloseIncomeEditDialog}
+              sx={{ display: { xs: "inline-flex", sm: "none" } }}
+            >
+              <ArrowBackIosNewOutlined fontSize="small" />
+            </IconButton>
+            <Typography sx={{ flexGrow: 1 }} variant="h3">
+              {t(tokens.dashboard.editIncome)}
+            </Typography>
+            <IconButton
+              aria-label={t(tokens.common.cancel)}
+              onClick={handleCloseIncomeEditDialog}
+              sx={{ display: { xs: "none", sm: "inline-flex" } }}
+            >
+              <CloseOutlined />
+            </IconButton>
+          </Stack>
+        </DialogTitle>
         <DialogContent>
           <Stack spacing={3} sx={{ pt: 1 }}>
             <Box component="form" onSubmit={handleSubmitIncomeEntry}>
@@ -1558,18 +1618,25 @@ function IncomeDrawer({
       PaperProps={{
         sx: {
           maxWidth: "100%",
-          width: 680,
+          width: { xs: "100vw", sm: 680 },
         },
       }}
     >
-      <Box sx={{ p: 3 }}>
+      <Box sx={{ p: { xs: 2, sm: 3 } }}>
         <Stack spacing={3}>
-          <Box>
-            <Typography variant="h2">{t(tokens.dashboard.income)}</Typography>
-            <Typography color="text.secondary">
-              {t(tokens.dashboard.totalActive)}: {centsToCurrency(totalCents)}
-            </Typography>
-          </Box>
+          <Stack alignItems="center" direction="row" spacing={1}>
+            <IconButton aria-label={t(tokens.common.back)} edge="start" onClick={onClose}>
+              <ArrowBackIosNewOutlined fontSize="small" />
+            </IconButton>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography noWrap variant="h2">
+                {t(tokens.dashboard.income)}
+              </Typography>
+              <Typography color="text.secondary">
+                {t(tokens.dashboard.totalActive)}: {centsToCurrency(totalCents)}
+              </Typography>
+            </Box>
+          </Stack>
 
           <Card variant="outlined">
             <CardContent>
@@ -1707,7 +1774,86 @@ function IncomeDrawer({
             <Divider />
           </Box>
 
-          <Table size="small">
+          <Stack spacing={1.25} sx={{ display: { xs: "flex", sm: "none" } }}>
+            {visibleEntries.map((entry) => (
+              <Card
+                key={entry.id}
+                variant="outlined"
+                sx={{
+                  bgcolor: entry.deleted_at ? "transparent" : financeColors.incomeSoft,
+                  borderLeft: "4px solid",
+                  borderLeftColor: entry.deleted_at ? "divider" : financeColors.income,
+                }}
+              >
+                <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
+                  <Stack spacing={1}>
+                    <Stack alignItems="flex-start" direction="row" spacing={1}>
+                      <Box sx={{ minWidth: 0, flexGrow: 1 }}>
+                        <Typography fontWeight={700} variant="body2">
+                          {entry.description}
+                        </Typography>
+                        <Typography color="text.secondary" variant="caption">
+                          {dayjs(entry.received_date).format("DD/MM/YYYY")}
+                        </Typography>
+                      </Box>
+                      <Typography color={financeColors.income} fontWeight={800}>
+                        {centsToCurrency(entry.amount_cents)}
+                      </Typography>
+                    </Stack>
+
+                    {(entry.notes || entry.deleted_reason) && (
+                      <Typography color="text.secondary" variant="caption">
+                        {entry.notes || entry.deleted_reason}
+                      </Typography>
+                    )}
+
+                    <Stack direction="row" justifyContent="space-between" alignItems="center">
+                      <Chip
+                        label={t(tokens.dashboard.income)}
+                        size="small"
+                        sx={{
+                          bgcolor: financeColors.incomeSoft,
+                          color: financeColors.income,
+                          fontWeight: 700,
+                        }}
+                      />
+                      {drawerTab === "active" ? (
+                        <Stack direction="row" spacing={0.5}>
+                          <Tooltip title={t(tokens.common.edit)}>
+                            <IconButton onClick={() => onEdit(entry)} size="small">
+                              <EditOutlined fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title={t(tokens.common.cancel)}>
+                            <IconButton
+                              color="error"
+                              onClick={() => onDelete(entry)}
+                              size="small"
+                            >
+                              <DeleteOutlineOutlined fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </Stack>
+                      ) : (
+                        <Tooltip title={t(tokens.common.restore)}>
+                          <IconButton onClick={() => onRestore(entry)} size="small">
+                            <ReplayOutlined fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </Stack>
+                  </Stack>
+                </CardContent>
+              </Card>
+            ))}
+            {visibleEntries.length === 0 && (
+              <Typography color="text.secondary" sx={{ py: 3 }} textAlign="center">
+                {t(tokens.dashboard.incomeNotFound)}
+              </Typography>
+            )}
+          </Stack>
+
+          <Table size="small" sx={{ display: { xs: "none", sm: "table" } }}>
             <TableHead>
               <TableRow>
                 <TableCell>{t(tokens.common.description)}</TableCell>
@@ -1846,18 +1992,25 @@ function EntryDrawer({
       PaperProps={{
         sx: {
           maxWidth: "100%",
-          width: 680,
+          width: { xs: "100vw", sm: 680 },
         },
       }}
     >
-      <Box sx={{ p: 3 }}>
+      <Box sx={{ p: { xs: 2, sm: 3 } }}>
         <Stack spacing={3}>
-          <Box>
-            <Typography variant="h2">{theme?.name}</Typography>
-            <Typography color="text.secondary">
-              {t(tokens.dashboard.totalActive)}: {centsToCurrency(theme?.total_cents ?? 0)}
-            </Typography>
-          </Box>
+          <Stack alignItems="center" direction="row" spacing={1}>
+            <IconButton aria-label={t(tokens.common.back)} edge="start" onClick={onClose}>
+              <ArrowBackIosNewOutlined fontSize="small" />
+            </IconButton>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography noWrap variant="h2">
+                {theme?.name}
+              </Typography>
+              <Typography color="text.secondary">
+                {t(tokens.dashboard.totalActive)}: {centsToCurrency(theme?.total_cents ?? 0)}
+              </Typography>
+            </Box>
+          </Stack>
 
           <Card variant="outlined">
             <CardContent>
@@ -1998,7 +2151,103 @@ function EntryDrawer({
             <Divider />
           </Box>
 
-          <Table size="small">
+          <Stack spacing={1.25} sx={{ display: { xs: "flex", sm: "none" } }}>
+            {visibleEntries.map((entry) => {
+              const isPlanned = Boolean(entry.recurring_entry_id);
+              const rowColor = isPlanned
+                ? financeColors.planned
+                : financeColors.unexpected;
+              const softColor = isPlanned
+                ? financeColors.plannedSoft
+                : financeColors.unexpectedSoft;
+
+              return (
+                <Card
+                  key={entry.id}
+                  variant="outlined"
+                  sx={{
+                    bgcolor: entry.deleted_at ? "transparent" : softColor,
+                    borderLeft: "4px solid",
+                    borderLeftColor: entry.deleted_at ? "divider" : rowColor,
+                  }}
+                >
+                  <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
+                    <Stack spacing={1}>
+                      <Stack alignItems="flex-start" direction="row" spacing={1}>
+                        <Box sx={{ minWidth: 0, flexGrow: 1 }}>
+                          <Typography fontWeight={700} variant="body2">
+                            {entry.description}
+                          </Typography>
+                          <Typography color="text.secondary" variant="caption">
+                            {dayjs(entry.entry_date).format("DD/MM/YYYY")}
+                          </Typography>
+                        </Box>
+                        <Typography color={rowColor} fontWeight={800}>
+                          {centsToCurrency(entry.amount_cents)}
+                        </Typography>
+                      </Stack>
+
+                      {(entry.notes || entry.deleted_reason) && (
+                        <Typography color="text.secondary" variant="caption">
+                          {entry.notes || entry.deleted_reason}
+                        </Typography>
+                      )}
+
+                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+                        <Chip
+                          label={
+                            isPlanned
+                              ? t(tokens.dashboard.planned)
+                              : t(tokens.dashboard.unexpected)
+                          }
+                          size="small"
+                          sx={{
+                            bgcolor: softColor,
+                            color: rowColor,
+                            fontWeight: 700,
+                          }}
+                        />
+                        {drawerTab === "active" ? (
+                          <Stack direction="row" spacing={0.5}>
+                            <Tooltip title={t(tokens.common.edit)}>
+                              <IconButton
+                                onClick={() => handleEditClick(entry)}
+                                size="small"
+                              >
+                                <EditOutlined fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title={t(tokens.common.cancel)}>
+                              <IconButton
+                                color="error"
+                                onClick={() => onDelete(entry)}
+                                size="small"
+                              >
+                                <DeleteOutlineOutlined fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </Stack>
+                        ) : (
+                          <Tooltip title={t(tokens.common.restore)}>
+                            <IconButton onClick={() => onRestore(entry)} size="small">
+                              <ReplayOutlined fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                      </Stack>
+                    </Stack>
+                  </CardContent>
+                </Card>
+              );
+            })}
+            {visibleEntries.length === 0 && (
+              <Typography color="text.secondary" sx={{ py: 3 }} textAlign="center">
+                {t(tokens.dashboard.entryNotFound)}
+              </Typography>
+            )}
+          </Stack>
+
+          <Table size="small" sx={{ display: { xs: "none", sm: "table" } }}>
             <TableHead>
               <TableRow>
                 <TableCell>{t(tokens.common.description)}</TableCell>
