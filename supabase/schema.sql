@@ -11,7 +11,7 @@ create table if not exists public.profiles (
 
 create table if not exists public.budget_months (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   year integer not null,
   month integer not null check (month between 1 and 12),
   salary_cents integer not null default 0 check (salary_cents >= 0),
@@ -41,7 +41,7 @@ create unique index if not exists idx_budget_themes_name_active
 
 create table if not exists public.monthly_theme_entries (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   budget_month_id uuid not null references public.budget_months(id) on delete cascade,
   theme_id uuid not null references public.budget_themes(id),
   description text not null,
@@ -62,7 +62,7 @@ create index if not exists idx_monthly_theme_entries_user_active
 
 create table if not exists public.goals (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   budget_month_id uuid references public.budget_months(id) on delete set null,
   name text not null,
   target_value_cents integer not null check (target_value_cents >= 0),
@@ -91,24 +91,33 @@ alter table public.monthly_theme_entries enable row level security;
 alter table public.goals enable row level security;
 alter table public.audit_logs enable row level security;
 
+alter table public.budget_months alter column user_id set default auth.uid();
+alter table public.monthly_theme_entries alter column user_id set default auth.uid();
+alter table public.goals alter column user_id set default auth.uid();
+
+drop policy if exists "profiles_select_own" on public.profiles;
 create policy "profiles_select_own"
   on public.profiles for select
   using (auth.uid() = id);
 
+drop policy if exists "profiles_update_own" on public.profiles;
 create policy "profiles_update_own"
   on public.profiles for update
   using (auth.uid() = id)
   with check (auth.uid() = id);
 
+drop policy if exists "budget_months_manage_own" on public.budget_months;
 create policy "budget_months_manage_own"
   on public.budget_months for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
+drop policy if exists "budget_themes_read_active" on public.budget_themes;
 create policy "budget_themes_read_active"
   on public.budget_themes for select
   using (deleted_at is null);
 
+drop policy if exists "monthly_theme_entries_manage_own" on public.monthly_theme_entries;
 create policy "monthly_theme_entries_manage_own"
   on public.monthly_theme_entries for all
   using (auth.uid() = user_id)
@@ -123,11 +132,13 @@ create policy "monthly_theme_entries_manage_own"
     )
   );
 
+drop policy if exists "goals_manage_own" on public.goals;
 create policy "goals_manage_own"
   on public.goals for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
+drop policy if exists "audit_logs_select_own" on public.audit_logs;
 create policy "audit_logs_select_own"
   on public.audit_logs for select
   using (auth.uid() = user_id);

@@ -13,17 +13,29 @@ const requireSupabase = () => {
   return supabase;
 };
 
+const requireAuthenticatedUserId = async (): Promise<string> => {
+  const client = requireSupabase();
+  const { data, error } = await client.auth.getUser();
+
+  if (error || !data.user) {
+    throw new Error("Sua sessao expirou. Entre novamente para continuar.");
+  }
+
+  return data.user.id;
+};
+
 export async function ensureBudgetMonth(
   userId: string,
   year: number,
   month: number
 ): Promise<BudgetMonth> {
   const client = requireSupabase();
+  const authenticatedUserId = await requireAuthenticatedUserId();
 
   const { data: existing, error: existingError } = await client
     .from("budget_months")
     .select("*")
-    .eq("user_id", userId)
+    .eq("user_id", authenticatedUserId)
     .eq("year", year)
     .eq("month", month)
     .is("deleted_at", null)
@@ -40,7 +52,7 @@ export async function ensureBudgetMonth(
   const { data, error } = await client
     .from("budget_months")
     .insert({
-      user_id: userId,
+      user_id: authenticatedUserId,
       year,
       month,
       salary_cents: 0,
@@ -119,9 +131,10 @@ export async function createEntry(input: {
   notes?: string;
 }): Promise<void> {
   const client = requireSupabase();
+  const authenticatedUserId = await requireAuthenticatedUserId();
 
   const { error } = await client.from("monthly_theme_entries").insert({
-    user_id: input.userId,
+    user_id: authenticatedUserId,
     budget_month_id: input.budgetMonthId,
     theme_id: input.themeId,
     description: input.description,
