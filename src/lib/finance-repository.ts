@@ -2,6 +2,7 @@ import { supabase } from "@/lib/supabase";
 import type {
   BudgetMonth,
   BudgetTheme,
+  MonthlyComparison,
   MonthlyIncomeEntry,
   MonthlyThemeEntry,
 } from "@/types/finance";
@@ -246,6 +247,90 @@ export async function listMonthIncomeEntries(
   }
 
   return (data ?? []) as MonthlyIncomeEntry[];
+}
+
+export async function listMonthlyComparisons(
+  currentYear: number,
+  currentMonth: number,
+  limit = 6
+): Promise<MonthlyComparison[]> {
+  const client = requireSupabase();
+  const authenticatedUserId = await requireAuthenticatedUserId();
+  const currentOrder = currentYear * 100 + currentMonth;
+
+  const { data: months, error: monthsError } = await client
+    .from("budget_months")
+    .select("id, year, month")
+    .eq("user_id", authenticatedUserId)
+    .is("deleted_at", null)
+    .lte("year", currentYear)
+    .order("year", { ascending: false })
+    .order("month", { ascending: false })
+    .limit(limit * 2);
+
+  if (monthsError) {
+    throw monthsError;
+  }
+
+  const selectedMonths = (months ?? [])
+    .filter((month) => month.year * 100 + month.month <= currentOrder)
+    .slice(0, limit)
+    .reverse();
+  const monthIds = selectedMonths.map((month) => month.id);
+
+  if (monthIds.length === 0) {
+    return [];
+  }
+
+  const [incomeResult, expenseResult] = await Promise.all([
+    client
+      .from("monthly_income_entries")
+      .select("budget_month_id, amount_cents")
+      .in("budget_month_id", monthIds)
+      .is("deleted_at", null),
+    client
+      .from("monthly_theme_entries")
+      .select("budget_month_id, amount_cents, recurring_entry_id")
+      .in("budget_month_id", monthIds)
+      .is("deleted_at", null),
+  ]);
+
+  if (incomeResult.error) {
+    throw incomeResult.error;
+  }
+
+  if (expenseResult.error) {
+    throw expenseResult.error;
+  }
+
+  return selectedMonths.map((month) => {
+    const income = (incomeResult.data ?? [])
+      .filter((entry) => entry.budget_month_id === month.id)
+      .reduce((sum, entry) => sum + entry.amount_cents, 0);
+    const plannedExpense = (expenseResult.data ?? [])
+      .filter(
+        (entry) =>
+          entry.budget_month_id === month.id && Boolean(entry.recurring_entry_id)
+      )
+      .reduce((sum, entry) => sum + entry.amount_cents, 0);
+    const unexpectedExpense = (expenseResult.data ?? [])
+      .filter(
+        (entry) =>
+          entry.budget_month_id === month.id && !entry.recurring_entry_id
+      )
+      .reduce((sum, entry) => sum + entry.amount_cents, 0);
+
+    return {
+      balance_cents: income - plannedExpense - unexpectedExpense,
+      budget_month_id: month.id,
+      income_cents: income,
+      label: `${String(month.month).padStart(2, "0")}/${month.year}`,
+      month: month.month,
+      planned_expense_cents: plannedExpense,
+      unexpected_expense_cents: unexpectedExpense,
+      year: month.year,
+    };
+  });
 }
 
 export async function createIncomeEntry(input: {

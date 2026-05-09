@@ -50,6 +50,17 @@ export type MonthlyIncomeEntry = {
   deleted_reason: string | null;
 };
 
+export type MonthlyComparison = {
+  budget_month_id: string;
+  label: string;
+  year: number;
+  month: number;
+  income_cents: number;
+  planned_expense_cents: number;
+  unexpected_expense_cents: number;
+  balance_cents: number;
+};
+
 export type ThemeSummary = BudgetTheme & {
   total_cents: number;
   recommended_cents: number;

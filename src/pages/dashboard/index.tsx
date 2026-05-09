@@ -51,6 +51,7 @@ import {
   createIncomeEntry,
   ensureBudgetMonth,
   listBudgetThemes,
+  listMonthlyComparisons,
   listMonthIncomeEntries,
   listMonthEntries,
   materializeRecurringEntries,
@@ -65,6 +66,7 @@ import type {
   BudgetMonth,
   BudgetTheme,
   EntryFormValues,
+  MonthlyComparison,
   MonthlyIncomeEntry,
   MonthlyThemeEntry,
   ThemeSummary,
@@ -99,6 +101,15 @@ const emptyIncomeForm = (): EntryFormValues => ({
   recurrenceEndDate: "",
 });
 
+const financeColors = {
+  income: "#15803d",
+  incomeSoft: "rgba(21, 128, 61, 0.1)",
+  planned: "#b45309",
+  plannedSoft: "rgba(180, 83, 9, 0.11)",
+  unexpected: "#b91c1c",
+  unexpectedSoft: "rgba(185, 28, 28, 0.1)",
+};
+
 export default function DashboardPage() {
   return (
     <AuthGuard>
@@ -113,6 +124,7 @@ function FinancialDashboard() {
   const { user } = useAuth();
   const [currentMonth, setCurrentMonth] = useState<Dayjs>(dayjs().startOf("month"));
   const [budgetMonth, setBudgetMonth] = useState<BudgetMonth | null>(null);
+  const [comparisons, setComparisons] = useState<MonthlyComparison[]>([]);
   const [themes, setThemes] = useState<BudgetTheme[]>([]);
   const [entries, setEntries] = useState<MonthlyThemeEntry[]>([]);
   const [incomeEntries, setIncomeEntries] = useState<MonthlyIncomeEntry[]>([]);
@@ -150,13 +162,15 @@ function FinancialDashboard() {
         currentMonth.year(),
         currentMonth.month() + 1
       );
-      const [themeRows, entryRows, incomeRows] = await Promise.all([
+      const [themeRows, entryRows, incomeRows, comparisonRows] = await Promise.all([
         listBudgetThemes(),
         listMonthEntries(month.id),
         listMonthIncomeEntries(month.id),
+        listMonthlyComparisons(currentMonth.year(), currentMonth.month() + 1),
       ]);
 
       setBudgetMonth(month);
+      setComparisons(comparisonRows);
       setThemes(themeRows);
       setEntries(entryRows);
       setIncomeEntries(incomeRows);
@@ -213,11 +227,19 @@ function FinancialDashboard() {
 
   const totals = useMemo(() => {
     const spent = activeEntries.reduce((sum, entry) => sum + entry.amount_cents, 0);
+    const planned = activeEntries
+      .filter((entry) => entry.recurring_entry_id)
+      .reduce((sum, entry) => sum + entry.amount_cents, 0);
+    const unexpected = activeEntries
+      .filter((entry) => !entry.recurring_entry_id)
+      .reduce((sum, entry) => sum + entry.amount_cents, 0);
 
     return {
       balance: incomeTotalCents - spent,
       income: incomeTotalCents,
+      planned,
       spent,
+      unexpected,
     };
   }, [activeEntries, incomeTotalCents]);
 
@@ -449,37 +471,77 @@ function FinancialDashboard() {
       </Head>
 
       <Stack spacing={3}>
-        <Stack
-          alignItems={{ xs: "stretch", md: "center" }}
-          direction={{ xs: "column", md: "row" }}
-          spacing={2}
+        <Card
+          sx={{
+            background:
+              "linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(37, 99, 235, 0.72))",
+            color: "common.white",
+            overflow: "hidden",
+            position: "relative",
+          }}
         >
-          <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="h1">Orcamento mensal</Typography>
-            <Typography color="text.secondary">
-              {currentMonth.format("MMMM [de] YYYY")}
-            </Typography>
-          </Box>
-
-          <Stack alignItems="center" direction="row" spacing={1}>
-            <Tooltip title="Mes anterior">
-              <IconButton onClick={() => setCurrentMonth((value) => value.subtract(1, "month"))}>
-                <ArrowBackIosNewOutlined />
-              </IconButton>
-            </Tooltip>
-            <Button
-              onClick={() => setCurrentMonth(dayjs().startOf("month"))}
-              variant="outlined"
+          <CardContent sx={{ p: { xs: 3, md: 4 } }}>
+            <Stack
+              alignItems={{ xs: "stretch", md: "center" }}
+              direction={{ xs: "column", md: "row" }}
+              spacing={3}
             >
-              Mes atual
-            </Button>
-            <Tooltip title="Proximo mes">
-              <IconButton onClick={() => setCurrentMonth((value) => value.add(1, "month"))}>
-                <ArrowForwardIosOutlined />
-              </IconButton>
-            </Tooltip>
-          </Stack>
-        </Stack>
+              <Box sx={{ flexGrow: 1 }}>
+                <Typography sx={{ opacity: 0.72 }} variant="body2">
+                  Visao financeira
+                </Typography>
+                <Typography sx={{ mt: 0.5 }} variant="h1">
+                  Orcamento mensal
+                </Typography>
+                <Typography sx={{ color: "rgba(255,255,255,0.76)", mt: 1 }}>
+                  {currentMonth.format("MMMM [de] YYYY")}
+                </Typography>
+              </Box>
+
+              <Stack
+                alignItems="center"
+                direction="row"
+                spacing={1}
+                sx={{
+                  bgcolor: "rgba(255,255,255,0.12)",
+                  border: "1px solid rgba(255,255,255,0.18)",
+                  borderRadius: 2,
+                  p: 1,
+                }}
+              >
+                <Tooltip title="Mes anterior">
+                  <IconButton
+                    onClick={() =>
+                      setCurrentMonth((value) => value.subtract(1, "month"))
+                    }
+                    sx={{ color: "common.white" }}
+                  >
+                    <ArrowBackIosNewOutlined />
+                  </IconButton>
+                </Tooltip>
+                <Button
+                  onClick={() => setCurrentMonth(dayjs().startOf("month"))}
+                  sx={{
+                    bgcolor: "rgba(255,255,255,0.14)",
+                    color: "common.white",
+                    "&:hover": { bgcolor: "rgba(255,255,255,0.22)" },
+                  }}
+                  variant="text"
+                >
+                  Mes atual
+                </Button>
+                <Tooltip title="Proximo mes">
+                  <IconButton
+                    onClick={() => setCurrentMonth((value) => value.add(1, "month"))}
+                    sx={{ color: "common.white" }}
+                  >
+                    <ArrowForwardIosOutlined />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
+            </Stack>
+          </CardContent>
+        </Card>
 
         <Box
           sx={{
@@ -487,7 +549,7 @@ function FinancialDashboard() {
             gap: 2,
             gridTemplateColumns: {
               xs: "1fr",
-              md: "1.1fr 1fr 1fr",
+              md: "1.1fr repeat(3, 1fr)",
             },
           }}
         >
@@ -521,13 +583,24 @@ function FinancialDashboard() {
             </CardContent>
           </Card>
 
-          <MetricCard label="Gasto total" value={centsToCurrency(totals.spent)} />
+          <MetricCard
+            label="Previstos"
+            tone="warning"
+            value={centsToCurrency(totals.planned)}
+          />
+          <MetricCard
+            label="Imprevistos"
+            tone="error"
+            value={centsToCurrency(totals.unexpected)}
+          />
           <MetricCard
             label="Saldo"
             tone={totals.balance < 0 ? "error" : "success"}
             value={centsToCurrency(totals.balance)}
           />
         </Box>
+
+        <MonthlyComparisonChart data={comparisons} />
 
         {totals.balance < 0 ? (
           <Alert severity="error">Atencao: voce gastou mais do que ganha neste mes.</Alert>
@@ -731,26 +804,203 @@ function FinancialDashboard() {
 type MetricCardProps = {
   label: string;
   value: string;
-  tone?: "default" | "success" | "error";
+  tone?: "default" | "success" | "error" | "warning";
 };
 
-function MetricCard({ label, tone = "default", value }: MetricCardProps) {
+type MonthlyComparisonChartProps = {
+  data: MonthlyComparison[];
+};
+
+function MonthlyComparisonChart({ data }: MonthlyComparisonChartProps) {
+  const maxValue = Math.max(
+    1,
+    ...data.flatMap((month) => [
+      month.income_cents,
+      month.planned_expense_cents,
+      month.unexpected_expense_cents,
+    ])
+  );
+
   return (
     <Card>
+      <CardContent>
+        <Stack spacing={2.5}>
+          <Stack
+            alignItems={{ xs: "stretch", sm: "center" }}
+            direction={{ xs: "column", sm: "row" }}
+            justifyContent="space-between"
+            spacing={1}
+          >
+            <Box>
+              <Typography variant="h3">Comparativo dos meses</Typography>
+              <Typography color="text.secondary" variant="body2">
+                Receitas, gastos previstos e imprevistos nos meses anteriores.
+              </Typography>
+            </Box>
+            <Stack direction="row" flexWrap="wrap" gap={1}>
+              <LegendDot color={financeColors.income} label="Receitas" />
+              <LegendDot color={financeColors.planned} label="Previstos" />
+              <LegendDot color={financeColors.unexpected} label="Imprevistos" />
+            </Stack>
+          </Stack>
+
+          {data.length === 0 ? (
+            <Typography color="text.secondary" sx={{ py: 4 }} textAlign="center">
+              Ainda nao ha meses suficientes para comparar.
+            </Typography>
+          ) : (
+            <Box
+              sx={{
+                display: "grid",
+                gap: 1.5,
+                gridTemplateColumns: {
+                  xs: "1fr",
+                  md: `repeat(${Math.min(data.length, 6)}, minmax(0, 1fr))`,
+                },
+              }}
+            >
+              {data.map((month) => (
+                <Box
+                  key={month.budget_month_id}
+                  sx={{
+                    border: "1px solid",
+                    borderColor: "divider",
+                    borderRadius: 1,
+                    p: 1.5,
+                  }}
+                >
+                  <Stack spacing={1.25}>
+                    <Stack direction="row" justifyContent="space-between">
+                      <Typography fontWeight={700} variant="body2">
+                        {month.label}
+                      </Typography>
+                      <Typography
+                        color={month.balance_cents < 0 ? "error.main" : "success.main"}
+                        fontWeight={700}
+                        variant="body2"
+                      >
+                        {centsToCurrency(month.balance_cents)}
+                      </Typography>
+                    </Stack>
+                    <ChartBar
+                      color={financeColors.income}
+                      label="Receitas"
+                      maxValue={maxValue}
+                      value={month.income_cents}
+                    />
+                    <ChartBar
+                      color={financeColors.planned}
+                      label="Previstos"
+                      maxValue={maxValue}
+                      value={month.planned_expense_cents}
+                    />
+                    <ChartBar
+                      color={financeColors.unexpected}
+                      label="Imprevistos"
+                      maxValue={maxValue}
+                      value={month.unexpected_expense_cents}
+                    />
+                  </Stack>
+                </Box>
+              ))}
+            </Box>
+          )}
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+type ChartBarProps = {
+  color: string;
+  label: string;
+  maxValue: number;
+  value: number;
+};
+
+function ChartBar({ color, label, maxValue, value }: ChartBarProps) {
+  const width = `${Math.max(3, Math.round((value / maxValue) * 100))}%`;
+
+  return (
+    <Box>
+      <Stack direction="row" justifyContent="space-between" spacing={1}>
+        <Typography color="text.secondary" variant="caption">
+          {label}
+        </Typography>
+        <Typography color="text.secondary" variant="caption">
+          {centsToCurrency(value)}
+        </Typography>
+      </Stack>
+      <Box
+        sx={{
+          bgcolor: "rgba(15, 23, 42, 0.08)",
+          borderRadius: 999,
+          height: 8,
+          mt: 0.5,
+          overflow: "hidden",
+        }}
+      >
+        <Box
+          sx={{
+            bgcolor: color,
+            borderRadius: 999,
+            height: "100%",
+            transition: "width 220ms ease",
+            width,
+          }}
+        />
+      </Box>
+    </Box>
+  );
+}
+
+type LegendDotProps = {
+  color: string;
+  label: string;
+};
+
+function LegendDot({ color, label }: LegendDotProps) {
+  return (
+    <Stack alignItems="center" direction="row" spacing={0.75}>
+      <Box sx={{ bgcolor: color, borderRadius: "50%", height: 10, width: 10 }} />
+      <Typography color="text.secondary" variant="caption">
+        {label}
+      </Typography>
+    </Stack>
+  );
+}
+
+function MetricCard({ label, tone = "default", value }: MetricCardProps) {
+  const toneMap = {
+    default: {
+      bgcolor: "background.paper",
+      color: "text.primary",
+      line: "primary.main",
+    },
+    error: {
+      bgcolor: financeColors.unexpectedSoft,
+      color: "error.main",
+      line: financeColors.unexpected,
+    },
+    success: {
+      bgcolor: financeColors.incomeSoft,
+      color: "success.main",
+      line: financeColors.income,
+    },
+    warning: {
+      bgcolor: financeColors.plannedSoft,
+      color: "warning.main",
+      line: financeColors.planned,
+    },
+  }[tone];
+
+  return (
+    <Card sx={{ bgcolor: toneMap.bgcolor, borderLeft: "4px solid", borderColor: toneMap.line }}>
       <CardContent>
         <Typography color="text.secondary" variant="body2">
           {label}
         </Typography>
-        <Typography
-          color={
-            tone === "success"
-              ? "success.main"
-              : tone === "error"
-                ? "error.main"
-                : "text.primary"
-          }
-          variant="h2"
-        >
+        <Typography color={toneMap.color} variant="h2">
           {value}
         </Typography>
       </CardContent>
@@ -954,9 +1204,27 @@ function IncomeDrawer({
             </TableHead>
             <TableBody>
               {visibleEntries.map((entry) => (
-                <TableRow key={entry.id}>
+                <TableRow
+                  key={entry.id}
+                  sx={{
+                    bgcolor: entry.deleted_at ? "transparent" : financeColors.incomeSoft,
+                    borderLeft: "4px solid",
+                    borderLeftColor: entry.deleted_at ? "divider" : financeColors.income,
+                  }}
+                >
                   <TableCell>
-                    <Typography variant="body2">{entry.description}</Typography>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Typography variant="body2">{entry.description}</Typography>
+                      <Chip
+                        label="Receita"
+                        size="small"
+                        sx={{
+                          bgcolor: financeColors.incomeSoft,
+                          color: financeColors.income,
+                          fontWeight: 700,
+                        }}
+                      />
+                    </Stack>
                     {(entry.notes || entry.deleted_reason) && (
                       <Typography color="text.secondary" variant="caption">
                         {entry.notes || entry.deleted_reason}
@@ -1208,10 +1476,37 @@ function EntryDrawer({
               </TableRow>
             </TableHead>
             <TableBody>
-              {visibleEntries.map((entry) => (
-                <TableRow key={entry.id}>
+              {visibleEntries.map((entry) => {
+                const isPlanned = Boolean(entry.recurring_entry_id);
+                const rowColor = isPlanned
+                  ? financeColors.planned
+                  : financeColors.unexpected;
+                const softColor = isPlanned
+                  ? financeColors.plannedSoft
+                  : financeColors.unexpectedSoft;
+
+                return (
+                <TableRow
+                  key={entry.id}
+                  sx={{
+                    bgcolor: entry.deleted_at ? "transparent" : softColor,
+                    borderLeft: "4px solid",
+                    borderLeftColor: entry.deleted_at ? "divider" : rowColor,
+                  }}
+                >
                   <TableCell>
-                    <Typography variant="body2">{entry.description}</Typography>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Typography variant="body2">{entry.description}</Typography>
+                      <Chip
+                        label={isPlanned ? "Previsto" : "Imprevisto"}
+                        size="small"
+                        sx={{
+                          bgcolor: softColor,
+                          color: rowColor,
+                          fontWeight: 700,
+                        }}
+                      />
+                    </Stack>
                     {(entry.notes || entry.deleted_reason) && (
                       <Typography color="text.secondary" variant="caption">
                         {entry.notes || entry.deleted_reason}
@@ -1249,7 +1544,8 @@ function EntryDrawer({
                     )}
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
               {visibleEntries.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={4}>
