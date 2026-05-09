@@ -1,10 +1,13 @@
 import { supabase } from "@/lib/supabase";
 import type {
+  AuditLog,
+  AuditLogTableName,
   BudgetMonth,
   BudgetTheme,
   MonthlyComparison,
   MonthlyIncomeEntry,
   MonthlyThemeEntry,
+  RecurringEntry,
 } from "@/types/finance";
 
 const requireSupabase = () => {
@@ -213,6 +216,26 @@ export async function listBudgetThemes(): Promise<BudgetTheme[]> {
   return (data ?? []) as BudgetTheme[];
 }
 
+export async function getRecurringEntry(entryId: string): Promise<RecurringEntry> {
+  const client = requireSupabase();
+
+  const { data, error } = await client
+    .from("recurring_entries")
+    .select("id, entry_day, start_year, start_month, end_year, end_month")
+    .eq("id", entryId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    throw new Error("Recorrencia nao encontrada.");
+  }
+
+  return data as RecurringEntry;
+}
+
 export async function listMonthEntries(
   budgetMonthId: string
 ): Promise<MonthlyThemeEntry[]> {
@@ -249,6 +272,29 @@ export async function listMonthIncomeEntries(
   }
 
   return (data ?? []) as MonthlyIncomeEntry[];
+}
+
+export async function listAuditLogsForRecord(
+  tableName: AuditLogTableName,
+  recordId: string
+): Promise<AuditLog[]> {
+  const client = requireSupabase();
+  await requireAuthenticatedUserId();
+
+  const { data, error } = await client
+    .from("audit_logs")
+    .select(
+      "id, table_name, record_id, action, reason, old_values, new_values, created_at"
+    )
+    .eq("table_name", tableName)
+    .eq("record_id", recordId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []) as AuditLog[];
 }
 
 export async function listMonthlyComparisons(
@@ -523,10 +569,93 @@ export async function updateEntry(input: {
   description: string;
   amountCents: number;
   entryDate: string;
+  themeId: string;
+  isRecurring: boolean;
+  recurrenceEndDate?: string;
+  existingRecurringEntryId?: string | null;
   notes?: string;
   changeReason?: string;
 }): Promise<void> {
   const client = requireSupabase();
+  const authenticatedUserId = await requireAuthenticatedUserId();
+  const now = new Date().toISOString();
+
+  let recurringEntryId: string | null = input.existingRecurringEntryId ?? null;
+
+  if (input.isRecurring) {
+    const start = getYearMonth(input.entryDate);
+    const end = input.recurrenceEndDate ? getYearMonth(input.recurrenceEndDate) : null;
+
+    if (recurringEntryId) {
+      const updatePayload: Record<string, unknown> = {
+        amount_cents: input.amountCents,
+        description: input.description,
+        entry_day: getDayOfMonth(input.entryDate),
+        entry_type: "expense",
+        notes: input.notes || null,
+        start_month: start.month,
+        start_year: start.year,
+        theme_id: input.themeId,
+        updated_at: now,
+        deleted_at: null,
+        deleted_reason: null,
+      };
+
+      if (end) {
+        updatePayload.end_month = end.month;
+        updatePayload.end_year = end.year;
+      }
+
+      const { error: recurringError } = await client
+        .from("recurring_entries")
+        .update(updatePayload)
+        .eq("id", recurringEntryId);
+
+      if (recurringError) {
+        throw recurringError;
+      }
+    } else {
+      const { data, error: insertRecurringError } = await client
+        .from("recurring_entries")
+        .insert({
+          amount_cents: input.amountCents,
+          description: input.description,
+          end_month: end?.month ?? null,
+          end_year: end?.year ?? null,
+          entry_day: getDayOfMonth(input.entryDate),
+          entry_type: "expense",
+          notes: input.notes || null,
+          start_month: start.month,
+          start_year: start.year,
+          theme_id: input.themeId,
+          user_id: authenticatedUserId,
+        })
+        .select("id")
+        .single();
+
+      if (insertRecurringError) {
+        throw insertRecurringError;
+      }
+
+      recurringEntryId = data.id;
+    }
+  } else if (recurringEntryId) {
+    const { error: disableError } = await client
+      .from("recurring_entries")
+      .update({
+        deleted_at: now,
+        deleted_reason: input.changeReason || null,
+        updated_at: now,
+      })
+      .eq("id", recurringEntryId)
+      .is("deleted_at", null);
+
+    if (disableError) {
+      throw disableError;
+    }
+
+    recurringEntryId = null;
+  }
 
   const { error } = await client
     .from("monthly_theme_entries")
@@ -536,7 +665,8 @@ export async function updateEntry(input: {
       change_reason: input.changeReason || null,
       entry_date: input.entryDate,
       notes: input.notes || null,
-      updated_at: new Date().toISOString(),
+      recurring_entry_id: recurringEntryId,
+      updated_at: now,
     })
     .eq("id", input.entryId);
 

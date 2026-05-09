@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Head from "next/head";
 import dayjs, { Dayjs } from "dayjs";
 import "dayjs/locale/pt-br";
@@ -43,15 +43,19 @@ import {
 } from "@mui/material";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
+import { useRecoilValue } from "recoil";
 import { AppTextField, MoneyTextField } from "@/components/form-fields";
 import { AuthGuard } from "@/guards/auth-guard";
 import { DashboardLayout } from "@/layouts/dashboard-layout";
 import { useAuth } from "@/contexts/auth-context";
+import { authTokenRefreshTickAtom } from "@/state/atoms/auth";
 import { tokens } from "@/locales/tokens";
 import {
   createEntry,
   createIncomeEntry,
   ensureBudgetMonth,
+  getRecurringEntry,
+  listAuditLogsForRecord,
   listBudgetThemes,
   listMonthlyComparisons,
   listMonthIncomeEntries,
@@ -65,6 +69,7 @@ import {
   updateEntry,
 } from "@/lib/finance-repository";
 import type {
+  AuditLog,
   BudgetMonth,
   BudgetTheme,
   EntryFormValues,
@@ -124,7 +129,10 @@ export default function DashboardPage() {
 
 function FinancialDashboard() {
   const { user } = useAuth();
-  const { t } = useTranslation();
+  const { i18n, t } = useTranslation();
+  const userId = user?.id ?? null;
+  const tokenRefreshTick = useRecoilValue(authTokenRefreshTickAtom);
+  const expensesSectionRef = useRef<HTMLDivElement | null>(null);
   const [currentMonth, setCurrentMonth] = useState<Dayjs>(dayjs().startOf("month"));
   const [budgetMonth, setBudgetMonth] = useState<BudgetMonth | null>(null);
   const [comparisons, setComparisons] = useState<MonthlyComparison[]>([]);
@@ -136,10 +144,16 @@ function FinancialDashboard() {
   const [incomeFormValues, setIncomeFormValues] = useState(emptyIncomeForm());
   const [editingIncomeEntry, setEditingIncomeEntry] =
     useState<MonthlyIncomeEntry | null>(null);
+  const [incomeEditDialogOpen, setIncomeEditDialogOpen] = useState(false);
+  const [incomeAuditLogs, setIncomeAuditLogs] = useState<AuditLog[]>([]);
+  const [incomeAuditLoading, setIncomeAuditLoading] = useState(false);
   const [selectedTheme, setSelectedTheme] = useState<ThemeSummary | null>(null);
   const [drawerTab, setDrawerTab] = useState<"active" | "deleted">("active");
   const [formValues, setFormValues] = useState(emptyEntryForm());
   const [editingEntry, setEditingEntry] = useState<MonthlyThemeEntry | null>(null);
+  const [expenseEditDialogOpen, setExpenseEditDialogOpen] = useState(false);
+  const [expenseAuditLogs, setExpenseAuditLogs] = useState<AuditLog[]>([]);
+  const [expenseAuditLoading, setExpenseAuditLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<MonthlyThemeEntry | null>(null);
   const [incomeDeleteTarget, setIncomeDeleteTarget] =
     useState<MonthlyIncomeEntry | null>(null);
@@ -149,7 +163,7 @@ function FinancialDashboard() {
   const [isSaving, setIsSaving] = useState(false);
 
   const loadMonth = useCallback(async () => {
-    if (!user) {
+    if (!userId) {
       return;
     }
 
@@ -157,7 +171,7 @@ function FinancialDashboard() {
 
     try {
       const month = await ensureBudgetMonth(
-        user.id,
+        userId,
         currentMonth.year(),
         currentMonth.month() + 1
       );
@@ -179,15 +193,17 @@ function FinancialDashboard() {
       setEntries(entryRows);
       setIncomeEntries(incomeRows);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t(tokens.dashboard.loadDataError));
+      toast.error(
+        error instanceof Error ? error.message : i18n.t(tokens.dashboard.loadDataError)
+      );
     } finally {
       setIsLoading(false);
     }
-  }, [currentMonth, t, user]);
+  }, [currentMonth, i18n, userId]);
 
   useEffect(() => {
     loadMonth();
-  }, [loadMonth]);
+  }, [loadMonth, tokenRefreshTick]);
 
   const activeEntries = useMemo(
     () => entries.filter((entry) => !entry.deleted_at),
@@ -276,7 +292,25 @@ function FinancialDashboard() {
       notes: entry.notes ?? "",
       recurrenceEndDate: "",
     });
+    setIncomeEditDialogOpen(true);
   };
+
+  useEffect(() => {
+    if (!incomeEditDialogOpen || !editingIncomeEntry) {
+      return;
+    }
+
+    setIncomeAuditLoading(true);
+
+    listAuditLogsForRecord("monthly_income_entries", editingIncomeEntry.id)
+      .then((logs) => setIncomeAuditLogs(logs))
+      .catch((error) => {
+        toast.error(
+          error instanceof Error ? error.message : t(tokens.dashboard.loadDataError)
+        );
+      })
+      .finally(() => setIncomeAuditLoading(false));
+  }, [editingIncomeEntry, incomeEditDialogOpen, t, tokenRefreshTick]);
 
   const handleSubmitIncomeEntry = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -316,6 +350,7 @@ function FinancialDashboard() {
       setEditingIncomeEntry(null);
       setIncomeFormValues(emptyIncomeForm());
       setIncomeEntries(await listMonthIncomeEntries(budgetMonth.id));
+      setIncomeEditDialogOpen(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t(tokens.dashboard.saveIncomeError));
     } finally {
@@ -330,12 +365,55 @@ function FinancialDashboard() {
       changeReason: "",
       description: entry.description,
       entryDate: entry.entry_date,
-      isRecurring: false,
+      isRecurring: Boolean(entry.recurring_entry_id),
       notes: entry.notes ?? "",
       recurrenceEndDate: "",
       themeId: entry.theme_id,
     });
+
+    setExpenseEditDialogOpen(true);
+
+    if (!entry.recurring_entry_id) {
+      return;
+    }
+
+    getRecurringEntry(entry.recurring_entry_id)
+      .then((recurrence) => {
+        if (!recurrence.end_year || !recurrence.end_month) {
+          return;
+        }
+
+        const base = dayjs(
+          `${recurrence.end_year}-${String(recurrence.end_month).padStart(2, "0")}-01`
+        );
+        const safeDay = Math.min(recurrence.entry_day, base.daysInMonth());
+
+        setFormValues((current) => ({
+          ...current,
+          recurrenceEndDate: base.date(safeDay).format("YYYY-MM-DD"),
+        }));
+      })
+      .catch(() => {
+        // Se falhar, mantem o form sem data final.
+      });
   };
+
+  useEffect(() => {
+    if (!expenseEditDialogOpen || !editingEntry) {
+      return;
+    }
+
+    setExpenseAuditLoading(true);
+
+    listAuditLogsForRecord("monthly_theme_entries", editingEntry.id)
+      .then((logs) => setExpenseAuditLogs(logs))
+      .catch((error) => {
+        toast.error(
+          error instanceof Error ? error.message : t(tokens.dashboard.loadDataError)
+        );
+      })
+      .finally(() => setExpenseAuditLoading(false));
+  }, [editingEntry, expenseEditDialogOpen, t, tokenRefreshTick]);
 
   const handleSubmitEntry = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -356,7 +434,11 @@ function FinancialDashboard() {
           description: formValues.description,
           entryDate: formValues.entryDate,
           entryId: editingEntry.id,
+          existingRecurringEntryId: editingEntry.recurring_entry_id,
+          isRecurring: formValues.isRecurring,
           notes: formValues.notes,
+          recurrenceEndDate: formValues.recurrenceEndDate,
+          themeId: editingEntry.theme_id,
         });
         toast.success(t(tokens.dashboard.expenseUpdated));
       } else {
@@ -377,11 +459,24 @@ function FinancialDashboard() {
       setEditingEntry(null);
       setFormValues(emptyEntryForm(selectedTheme.id));
       setEntries(await listMonthEntries(budgetMonth.id));
+      setExpenseEditDialogOpen(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t(tokens.dashboard.saveExpenseError));
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleCloseIncomeEditDialog = () => {
+    setIncomeEditDialogOpen(false);
+    setEditingIncomeEntry(null);
+    setIncomeFormValues(emptyIncomeForm());
+  };
+
+  const handleCloseExpenseEditDialog = () => {
+    setExpenseEditDialogOpen(false);
+    setEditingEntry(null);
+    setFormValues(emptyEntryForm(selectedTheme?.id));
   };
 
   const handleSoftDelete = async () => {
@@ -560,63 +655,104 @@ function FinancialDashboard() {
             },
           }}
         >
-          <Card>
+          <Card
+            onClick={() => setIncomeDrawerOpen(true)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                setIncomeDrawerOpen(true);
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            sx={{
+              cursor: "pointer",
+              position: "relative",
+              transition: "transform 160ms ease, box-shadow 160ms ease",
+              "&:hover": {
+                boxShadow: 6,
+                transform: "translateY(-2px)",
+              },
+            }}
+          >
             <CardContent>
-              <Stack
-                alignItems={{ xs: "stretch", sm: "center" }}
-                direction={{ xs: "column", sm: "row" }}
-                spacing={2}
+              <Box sx={{ pr: 8 }}>
+                <Typography color="text.secondary" variant="body2">
+                  {t(tokens.dashboard.income)}
+                </Typography>
+                <Typography variant="h2">{centsToCurrency(totals.income)}</Typography>
+                <Typography color="text.secondary" variant="caption">
+                  {t(tokens.dashboard.incomeActiveCount, {
+                    count: activeIncomeEntries.length,
+                  })}
+                </Typography>
+              </Box>
+              <Typography
+                color="primary.main"
+                sx={{
+                  bottom: 16,
+                  cursor: "pointer",
+                  position: "absolute",
+                  right: 16,
+                  textDecoration: "underline",
+                }}
+                variant="body2"
               >
-                <Box sx={{ flexGrow: 1 }}>
-                  <Typography color="text.secondary" variant="body2">
-                    {t(tokens.dashboard.income)}
-                  </Typography>
-                  <Typography variant="h2">
-                    {centsToCurrency(totals.income)}
-                  </Typography>
-                  <Typography color="text.secondary" variant="caption">
-                    {t(tokens.dashboard.incomeActiveCount, {
-                      count: activeIncomeEntries.length,
-                    })}
-                  </Typography>
-                </Box>
-                <Button
-                  disabled={isSaving}
-                  onClick={() => setIncomeDrawerOpen(true)}
-                  startIcon={<AddOutlined />}
-                  variant="contained"
-                >
-                  {t(tokens.common.manage)}
-                </Button>
-              </Stack>
+                {t(tokens.common.manage)}
+              </Typography>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card
+            onClick={() =>
+              expensesSectionRef.current?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+              })
+            }
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                expensesSectionRef.current?.scrollIntoView({
+                  behavior: "smooth",
+                  block: "start",
+                });
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            sx={{
+              cursor: "pointer",
+              position: "relative",
+              transition: "transform 160ms ease, box-shadow 160ms ease",
+              "&:hover": {
+                boxShadow: 6,
+                transform: "translateY(-2px)",
+              },
+            }}
+          >
             <CardContent>
-              <Stack
-                alignItems={{ xs: "stretch", sm: "center" }}
-                direction={{ xs: "column", sm: "row" }}
-                spacing={2}
+              <Box sx={{ pr: 8 }}>
+                <Typography color="text.secondary" variant="body2">
+                  {t(tokens.dashboard.spent)}
+                </Typography>
+                <Typography color="error.main" variant="h2">
+                  {centsToCurrency(totals.spent)}
+                </Typography>
+              </Box>
+              <Typography
+                color="primary.main"
+                sx={{
+                  bottom: 16,
+                  cursor: "pointer",
+                  position: "absolute",
+                  right: 16,
+                  textDecoration: "underline",
+                }}
+                variant="body2"
               >
-                <Box sx={{ flexGrow: 1 }}>
-                  <Typography color="text.secondary" variant="body2">
-                    {t(tokens.dashboard.spent)}
-                  </Typography>
-                  <Typography color="error.main" variant="h2">
-                    {centsToCurrency(totals.spent)}
-                  </Typography>
-                </Box>
-                <Button
-                  color="error"
-                  disabled={isSaving}
-                  onClick={() => setExpenseThemeDialogOpen(true)}
-                  startIcon={<AddOutlined />}
-                  variant="outlined"
-                >
-                  {t(tokens.dashboard.addExpense)}
-                </Button>
-              </Stack>
+                {t(tokens.common.manage)}
+              </Typography>
             </CardContent>
           </Card>
 
@@ -646,6 +782,7 @@ function FinancialDashboard() {
         )}
 
         <Stack
+          ref={expensesSectionRef}
           alignItems={{ xs: "stretch", md: "center" }}
           direction={{ xs: "column", md: "row" }}
           justifyContent="space-between"
@@ -777,8 +914,7 @@ function FinancialDashboard() {
         onSubmit={handleSubmitEntry}
         onTabChange={setDrawerTab}
         onCancelEdit={() => {
-          setEditingEntry(null);
-          setFormValues(emptyEntryForm(selectedTheme?.id));
+          handleCloseExpenseEditDialog();
         }}
         open={Boolean(selectedTheme)}
         theme={selectedTheme}
@@ -792,8 +928,7 @@ function FinancialDashboard() {
         formValues={incomeFormValues}
         isSaving={isSaving}
         onCancelEdit={() => {
-          setEditingIncomeEntry(null);
-          setIncomeFormValues(emptyIncomeForm());
+          handleCloseIncomeEditDialog();
         }}
         onClose={() => setIncomeDrawerOpen(false)}
         onDelete={(entry) => setIncomeDeleteTarget(entry)}
@@ -805,6 +940,226 @@ function FinancialDashboard() {
         open={incomeDrawerOpen}
         totalCents={incomeTotalCents}
       />
+
+      <Dialog
+        fullWidth
+        maxWidth="md"
+        onClose={handleCloseExpenseEditDialog}
+        open={expenseEditDialogOpen && Boolean(editingEntry)}
+      >
+        <DialogTitle>{t(tokens.dashboard.editExpense)}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={3} sx={{ pt: 1 }}>
+            <Box component="form" onSubmit={handleSubmitEntry}>
+              <Stack spacing={2}>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                  <AppTextField
+                    autoFocus
+                    fullWidth
+                    label={t(tokens.common.description)}
+                    onChange={(event) =>
+                      setFormValues({ ...formValues, description: event.target.value })
+                    }
+                    required
+                    value={formValues.description}
+                  />
+                  <MoneyTextField
+                    label={t(tokens.common.value)}
+                    onChange={(event) => setFormValues({ ...formValues, amount: event })}
+                    required
+                    value={formValues.amount}
+                  />
+                </Stack>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                  <AppTextField
+                    fullWidth
+                    label={t(tokens.common.date)}
+                    onChange={(event) =>
+                      setFormValues({ ...formValues, entryDate: event.target.value })
+                    }
+                    required
+                    type="date"
+                    value={formValues.entryDate}
+                  />
+                  <AppTextField
+                    fullWidth
+                    label={t(tokens.common.notes)}
+                    onChange={(event) =>
+                      setFormValues({ ...formValues, notes: event.target.value })
+                    }
+                    value={formValues.notes}
+                  />
+                </Stack>
+                <AppTextField
+                  fullWidth
+                  label={t(tokens.dashboard.changeReason)}
+                  onChange={(event) =>
+                    setFormValues({ ...formValues, changeReason: event.target.value })
+                  }
+                  placeholder={t(tokens.common.optional)}
+                  value={formValues.changeReason}
+                />
+
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={formValues.isRecurring}
+                        onChange={(event) =>
+                          setFormValues({
+                            ...formValues,
+                            isRecurring: event.target.checked,
+                            recurrenceEndDate: event.target.checked
+                              ? formValues.recurrenceEndDate
+                              : "",
+                          })
+                        }
+                      />
+                    }
+                    label={t(tokens.dashboard.recurring)}
+                  />
+                  {formValues.isRecurring && (
+                    <AppTextField
+                      fullWidth
+                      helperText={t(tokens.dashboard.repeatUntilHelp)}
+                      label={t(tokens.dashboard.repeatUntil)}
+                      onChange={(event) =>
+                        setFormValues({
+                          ...formValues,
+                          recurrenceEndDate: event.target.value,
+                        })
+                      }
+                      type="date"
+                      value={formValues.recurrenceEndDate}
+                    />
+                  )}
+                </Stack>
+
+                <Stack direction="row" justifyContent="flex-end" spacing={1}>
+                  <Button onClick={handleCloseExpenseEditDialog}>
+                    {t(tokens.common.back)}
+                  </Button>
+                  <Button
+                    disabled={isSaving}
+                    startIcon={<SaveOutlined />}
+                    type="submit"
+                    variant="contained"
+                  >
+                    {t(tokens.common.save)}
+                  </Button>
+                </Stack>
+              </Stack>
+            </Box>
+
+            <Divider />
+
+            <Box>
+              <Typography sx={{ mb: 1 }} variant="h3">
+                {t(tokens.dashboard.historyTitle)}
+              </Typography>
+              <AuditTimeline isLoading={expenseAuditLoading} logs={expenseAuditLogs} />
+            </Box>
+          </Stack>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        fullWidth
+        maxWidth="md"
+        onClose={handleCloseIncomeEditDialog}
+        open={incomeEditDialogOpen && Boolean(editingIncomeEntry)}
+      >
+        <DialogTitle>{t(tokens.dashboard.editIncome)}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={3} sx={{ pt: 1 }}>
+            <Box component="form" onSubmit={handleSubmitIncomeEntry}>
+              <Stack spacing={2}>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                  <AppTextField
+                    autoFocus
+                    fullWidth
+                    label={t(tokens.common.description)}
+                    onChange={(event) =>
+                      setIncomeFormValues({
+                        ...incomeFormValues,
+                        description: event.target.value,
+                      })
+                    }
+                    placeholder={t(tokens.dashboard.incomePlaceholder)}
+                    required
+                    value={incomeFormValues.description}
+                  />
+                  <MoneyTextField
+                    label={t(tokens.common.value)}
+                    onChange={(event) =>
+                      setIncomeFormValues({ ...incomeFormValues, amount: event })
+                    }
+                    required
+                    value={incomeFormValues.amount}
+                  />
+                </Stack>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                  <AppTextField
+                    fullWidth
+                    label={t(tokens.common.date)}
+                    onChange={(event) =>
+                      setIncomeFormValues({
+                        ...incomeFormValues,
+                        entryDate: event.target.value,
+                      })
+                    }
+                    required
+                    type="date"
+                    value={incomeFormValues.entryDate}
+                  />
+                  <AppTextField
+                    fullWidth
+                    label={t(tokens.common.notes)}
+                    onChange={(event) =>
+                      setIncomeFormValues({ ...incomeFormValues, notes: event.target.value })
+                    }
+                    value={incomeFormValues.notes}
+                  />
+                </Stack>
+
+                <AppTextField
+                  fullWidth
+                  label={t(tokens.dashboard.changeReason)}
+                  onChange={(event) =>
+                    setIncomeFormValues({
+                      ...incomeFormValues,
+                      changeReason: event.target.value,
+                    })
+                  }
+                  placeholder={t(tokens.common.optional)}
+                  value={incomeFormValues.changeReason}
+                />
+
+                <Stack direction="row" justifyContent="flex-end" spacing={1}>
+                  <Button onClick={handleCloseIncomeEditDialog}>{t(tokens.common.back)}</Button>
+                  <Button
+                    disabled={isSaving}
+                    startIcon={<SaveOutlined />}
+                    type="submit"
+                    variant="contained"
+                  >
+                    {t(tokens.common.save)}
+                  </Button>
+                </Stack>
+              </Stack>
+            </Box>
+
+            <Divider />
+
+            <Box>
+              <Typography sx={{ mb: 1 }} variant="h3">
+                {t(tokens.dashboard.historyTitle)}
+              </Typography>
+              <AuditTimeline isLoading={incomeAuditLoading} logs={incomeAuditLogs} />
+            </Box>
+          </Stack>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} fullWidth>
         <DialogTitle>{t(tokens.dashboard.cancelExpense)}</DialogTitle>
@@ -1459,17 +1814,6 @@ function EntryDrawer({
 
   const handleEditClick = (entry: MonthlyThemeEntry) => {
     onEdit(entry);
-
-    if (typeof document === "undefined") {
-      return;
-    }
-
-    requestAnimationFrame(() => {
-      document
-        .getElementById("expense-entry-form")
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-      (document.getElementById("expense-description") as HTMLInputElement | null)?.focus();
-    });
   };
 
   return (
@@ -1542,7 +1886,7 @@ function EntryDrawer({
                       value={formValues.notes}
                     />
                   </Stack>
-                  {editingEntry ? (
+                  {editingEntry && (
                     <AppTextField
                       fullWidth
                       label={t(tokens.dashboard.changeReason)}
@@ -1555,39 +1899,42 @@ function EntryDrawer({
                       placeholder={t(tokens.common.optional)}
                       value={formValues.changeReason}
                     />
-                  ) : (
-                    <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                      <FormControlLabel
-                        control={
-                          <Checkbox
-                            checked={formValues.isRecurring}
-                            onChange={(event) =>
-                              onFormChange({
-                                ...formValues,
-                                isRecurring: event.target.checked,
-                              })
-                            }
-                          />
-                        }
-                        label={t(tokens.dashboard.recurring)}
-                      />
-                      {formValues.isRecurring && (
-                        <AppTextField
-                          fullWidth
-                          helperText={t(tokens.dashboard.repeatUntilHelp)}
-                          label={t(tokens.dashboard.repeatUntil)}
+                  )}
+
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={formValues.isRecurring}
                           onChange={(event) =>
                             onFormChange({
                               ...formValues,
-                              recurrenceEndDate: event.target.value,
+                              isRecurring: event.target.checked,
+                              recurrenceEndDate: event.target.checked
+                                ? formValues.recurrenceEndDate
+                                : "",
                             })
                           }
-                          type="date"
-                          value={formValues.recurrenceEndDate}
                         />
-                      )}
-                    </Stack>
-                  )}
+                      }
+                      label={t(tokens.dashboard.recurring)}
+                    />
+                    {formValues.isRecurring && (
+                      <AppTextField
+                        fullWidth
+                        helperText={t(tokens.dashboard.repeatUntilHelp)}
+                        label={t(tokens.dashboard.repeatUntil)}
+                        onChange={(event) =>
+                          onFormChange({
+                            ...formValues,
+                            recurrenceEndDate: event.target.value,
+                          })
+                        }
+                        type="date"
+                        value={formValues.recurrenceEndDate}
+                      />
+                    )}
+                  </Stack>
                   <Stack direction="row" justifyContent="flex-end" spacing={1}>
                     {editingEntry && (
                       <Button onClick={onCancelEdit}>{t(tokens.common.clear)}</Button>
@@ -1727,5 +2074,122 @@ function EntryDrawer({
         </Stack>
       </Box>
     </Drawer>
+  );
+}
+
+type AuditTimelineProps = {
+  isLoading: boolean;
+  logs: AuditLog[];
+};
+
+function AuditTimeline({ isLoading, logs }: AuditTimelineProps) {
+  const { t } = useTranslation();
+
+  if (isLoading) {
+    return (
+      <Stack alignItems="center" justifyContent="center" sx={{ py: 2 }}>
+        <CircularProgress size={22} />
+      </Stack>
+    );
+  }
+
+  if (logs.length === 0) {
+    return (
+      <Typography color="text.secondary" variant="body2">
+        {t(tokens.dashboard.historyEmpty)}
+      </Typography>
+    );
+  }
+
+  const getActionLabel = (action: string) => {
+    switch (action) {
+      case "INSERT":
+        return t(tokens.dashboard.auditInsert);
+      case "UPDATE":
+        return t(tokens.dashboard.auditUpdate);
+      case "SOFT_DELETE":
+        return t(tokens.dashboard.auditSoftDelete);
+      case "RESTORE":
+        return t(tokens.dashboard.auditRestore);
+      case "DELETE":
+        return t(tokens.dashboard.auditDelete);
+      default:
+        return action;
+    }
+  };
+
+  const getChangedFields = (log: AuditLog): string[] => {
+    if (!log.old_values || !log.new_values) {
+      return [];
+    }
+
+    const excluded = new Set([
+      "created_at",
+      "updated_at",
+      "change_reason",
+      "user_id",
+      "budget_month_id",
+    ]);
+    const keys = new Set([
+      ...Object.keys(log.old_values),
+      ...Object.keys(log.new_values),
+    ]);
+
+    return [...keys]
+      .filter((key) => !excluded.has(key))
+      .filter((key) => {
+        const before = (log.old_values as Record<string, unknown>)[key];
+        const after = (log.new_values as Record<string, unknown>)[key];
+        return JSON.stringify(before) !== JSON.stringify(after);
+      })
+      .sort((a, b) => a.localeCompare(b));
+  };
+
+  return (
+    <Stack spacing={1.25}>
+      {logs.map((log) => {
+        const changedFields = getChangedFields(log);
+
+        return (
+          <Box
+            key={log.id}
+            sx={{
+              border: "1px solid",
+              borderColor: "divider",
+              borderRadius: 1,
+              p: 1.5,
+            }}
+          >
+            <Stack spacing={0.75}>
+              <Stack
+                alignItems={{ xs: "flex-start", sm: "center" }}
+                direction={{ xs: "column", sm: "row" }}
+                justifyContent="space-between"
+                spacing={1}
+              >
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Chip label={getActionLabel(log.action)} size="small" />
+                  <Typography variant="body2" fontWeight={700}>
+                    {dayjs(log.created_at).format("DD/MM/YYYY HH:mm")}
+                  </Typography>
+                </Stack>
+
+                {log.reason && (
+                  <Typography color="text.secondary" variant="caption">
+                    {t(tokens.dashboard.changeReason)}: {log.reason}
+                  </Typography>
+                )}
+              </Stack>
+
+              {changedFields.length > 0 && (
+                <Typography color="text.secondary" variant="caption">
+                  {t(tokens.dashboard.historyChangedFields)}: {changedFields.join(", ")}
+                </Typography>
+              )}
+            </Stack>
+          </Box>
+        );
+      })}
+    </Stack>
   );
 }

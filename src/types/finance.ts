@@ -76,3 +76,37 @@ export type EntryFormValues = {
   recurrenceEndDate: string;
   changeReason: string;
 };
+
+export type RecurringEntry = {
+  id: string;
+  entry_day: number;
+  start_year: number;
+  start_month: number;
+  end_year: number | null;
+  end_month: number | null;
+};
+
+export type AuditLogAction =
+  | "INSERT"
+  | "UPDATE"
+  | "SOFT_DELETE"
+  | "RESTORE"
+  | "DELETE";
+
+export type AuditLogTableName =
+  | "budget_months"
+  | "monthly_income_entries"
+  | "monthly_theme_entries"
+  | "recurring_entries"
+  | "goals";
+
+export type AuditLog = {
+  id: string;
+  table_name: AuditLogTableName;
+  record_id: string;
+  action: AuditLogAction | string;
+  reason: string | null;
+  old_values: Record<string, unknown> | null;
+  new_values: Record<string, unknown> | null;
+  created_at: string;
+};
