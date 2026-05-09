@@ -52,7 +52,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const signIn = useCallback(async (email: string, password: string) => {
     if (!supabase) {
-      throw new Error("Configure as variaveis do Supabase no arquivo .env.local.");
+      throw new Error(
+        "Não foi possível conectar o serviço agora. Confira a configuração e tente novamente."
+      );
     }
 
     const { error } = await supabase.auth.signInWithPassword({
@@ -68,7 +70,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const signUp = useCallback(
     async (email: string, password: string, name: string) => {
       if (!supabase) {
-        throw new Error("Configure as variaveis do Supabase no arquivo .env.local.");
+        throw new Error(
+          "Não foi possível conectar o serviço agora. Confira a configuração e tente novamente."
+        );
       }
 
       const { error } = await supabase.auth.signUp({

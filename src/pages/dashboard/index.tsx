@@ -42,10 +42,12 @@ import {
   Typography,
 } from "@mui/material";
 import toast from "react-hot-toast";
+import { useTranslation } from "react-i18next";
 import { AppTextField, MoneyTextField } from "@/components/form-fields";
 import { AuthGuard } from "@/guards/auth-guard";
 import { DashboardLayout } from "@/layouts/dashboard-layout";
 import { useAuth } from "@/contexts/auth-context";
+import { tokens } from "@/locales/tokens";
 import {
   createEntry,
   createIncomeEntry,
@@ -122,6 +124,7 @@ export default function DashboardPage() {
 
 function FinancialDashboard() {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [currentMonth, setCurrentMonth] = useState<Dayjs>(dayjs().startOf("month"));
   const [budgetMonth, setBudgetMonth] = useState<BudgetMonth | null>(null);
   const [comparisons, setComparisons] = useState<MonthlyComparison[]>([]);
@@ -140,6 +143,7 @@ function FinancialDashboard() {
   const [deleteTarget, setDeleteTarget] = useState<MonthlyThemeEntry | null>(null);
   const [incomeDeleteTarget, setIncomeDeleteTarget] =
     useState<MonthlyIncomeEntry | null>(null);
+  const [expenseThemeDialogOpen, setExpenseThemeDialogOpen] = useState(false);
   const [deleteReason, setDeleteReason] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -175,11 +179,11 @@ function FinancialDashboard() {
       setEntries(entryRows);
       setIncomeEntries(incomeRows);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao carregar dados.");
+      toast.error(error instanceof Error ? error.message : t(tokens.dashboard.loadDataError));
     } finally {
       setIsLoading(false);
     }
-  }, [currentMonth, user]);
+  }, [currentMonth, t, user]);
 
   useEffect(() => {
     loadMonth();
@@ -295,7 +299,7 @@ function FinancialDashboard() {
           notes: incomeFormValues.notes,
           receivedDate: incomeFormValues.entryDate,
         });
-        toast.success("Receita atualizada.");
+        toast.success(t(tokens.dashboard.incomeUpdated));
       } else {
         await createIncomeEntry({
           amountCents,
@@ -306,14 +310,14 @@ function FinancialDashboard() {
           receivedDate: incomeFormValues.entryDate,
           recurrenceEndDate: incomeFormValues.recurrenceEndDate,
         });
-        toast.success("Receita adicionada.");
+        toast.success(t(tokens.dashboard.incomeAdded));
       }
 
       setEditingIncomeEntry(null);
       setIncomeFormValues(emptyIncomeForm());
       setIncomeEntries(await listMonthIncomeEntries(budgetMonth.id));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao salvar receita.");
+      toast.error(error instanceof Error ? error.message : t(tokens.dashboard.saveIncomeError));
     } finally {
       setIsSaving(false);
     }
@@ -354,7 +358,7 @@ function FinancialDashboard() {
           entryId: editingEntry.id,
           notes: formValues.notes,
         });
-        toast.success("Lancamento atualizado.");
+        toast.success(t(tokens.dashboard.expenseUpdated));
       } else {
         await createEntry({
           amountCents,
@@ -367,14 +371,14 @@ function FinancialDashboard() {
           themeId: selectedTheme.id,
           userId: user.id,
         });
-        toast.success("Lancamento adicionado.");
+        toast.success(t(tokens.dashboard.expenseAdded));
       }
 
       setEditingEntry(null);
       setFormValues(emptyEntryForm(selectedTheme.id));
       setEntries(await listMonthEntries(budgetMonth.id));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao salvar lancamento.");
+      toast.error(error instanceof Error ? error.message : t(tokens.dashboard.saveExpenseError));
     } finally {
       setIsSaving(false);
     }
@@ -392,9 +396,9 @@ function FinancialDashboard() {
       setEntries(await listMonthEntries(budgetMonth.id));
       setDeleteTarget(null);
       setDeleteReason("");
-      toast.success("Lancamento cancelado.");
+      toast.success(t(tokens.dashboard.expenseCanceled));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao cancelar lancamento.");
+      toast.error(error instanceof Error ? error.message : t(tokens.dashboard.cancelExpenseError));
     } finally {
       setIsSaving(false);
     }
@@ -412,9 +416,9 @@ function FinancialDashboard() {
       setIncomeEntries(await listMonthIncomeEntries(budgetMonth.id));
       setIncomeDeleteTarget(null);
       setDeleteReason("");
-      toast.success("Receita cancelada.");
+      toast.success(t(tokens.dashboard.incomeCanceled));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao cancelar receita.");
+      toast.error(error instanceof Error ? error.message : t(tokens.dashboard.cancelIncomeError));
     } finally {
       setIsSaving(false);
     }
@@ -430,9 +434,9 @@ function FinancialDashboard() {
     try {
       await restoreEntry(entry.id);
       setEntries(await listMonthEntries(budgetMonth.id));
-      toast.success("Lancamento restaurado.");
+      toast.success(t(tokens.dashboard.expenseRestored));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao restaurar lancamento.");
+      toast.error(error instanceof Error ? error.message : t(tokens.dashboard.restoreExpenseError));
     } finally {
       setIsSaving(false);
     }
@@ -448,9 +452,9 @@ function FinancialDashboard() {
     try {
       await restoreIncomeEntry(entry.id);
       setIncomeEntries(await listMonthIncomeEntries(budgetMonth.id));
-      toast.success("Receita restaurada.");
+      toast.success(t(tokens.dashboard.incomeRestored));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao restaurar receita.");
+      toast.error(error instanceof Error ? error.message : t(tokens.dashboard.restoreIncomeError));
     } finally {
       setIsSaving(false);
     }
@@ -467,7 +471,9 @@ function FinancialDashboard() {
   return (
     <>
       <Head>
-        <title>Dashboard | Planejador Financeiro</title>
+        <title>
+          {t(tokens.common.dashboard)} | {t(tokens.common.appName)}
+        </title>
       </Head>
 
       <Stack spacing={3}>
@@ -488,10 +494,10 @@ function FinancialDashboard() {
             >
               <Box sx={{ flexGrow: 1 }}>
                 <Typography sx={{ opacity: 0.72 }} variant="body2">
-                  Visao financeira
+                  {t(tokens.dashboard.financialOverview)}
                 </Typography>
                 <Typography sx={{ mt: 0.5 }} variant="h1">
-                  Orcamento mensal
+                  {t(tokens.dashboard.monthBudget)}
                 </Typography>
                 <Typography sx={{ color: "rgba(255,255,255,0.76)", mt: 1 }}>
                   {currentMonth.format("MMMM [de] YYYY")}
@@ -509,7 +515,7 @@ function FinancialDashboard() {
                   p: 1,
                 }}
               >
-                <Tooltip title="Mes anterior">
+                <Tooltip title={t(tokens.dashboard.previousMonth)}>
                   <IconButton
                     onClick={() =>
                       setCurrentMonth((value) => value.subtract(1, "month"))
@@ -528,9 +534,9 @@ function FinancialDashboard() {
                   }}
                   variant="text"
                 >
-                  Mes atual
+                  {t(tokens.dashboard.currentMonth)}
                 </Button>
-                <Tooltip title="Proximo mes">
+                <Tooltip title={t(tokens.dashboard.nextMonth)}>
                   <IconButton
                     onClick={() => setCurrentMonth((value) => value.add(1, "month"))}
                     sx={{ color: "common.white" }}
@@ -549,7 +555,8 @@ function FinancialDashboard() {
             gap: 2,
             gridTemplateColumns: {
               xs: "1fr",
-              md: "1.1fr repeat(3, 1fr)",
+              sm: "repeat(2, minmax(0, 1fr))",
+              lg: "1.1fr repeat(4, minmax(0, 1fr))",
             },
           }}
         >
@@ -562,13 +569,15 @@ function FinancialDashboard() {
               >
                 <Box sx={{ flexGrow: 1 }}>
                   <Typography color="text.secondary" variant="body2">
-                    Receitas do mes
+                    {t(tokens.dashboard.income)}
                   </Typography>
                   <Typography variant="h2">
                     {centsToCurrency(totals.income)}
                   </Typography>
                   <Typography color="text.secondary" variant="caption">
-                    {activeIncomeEntries.length} entradas ativas
+                    {t(tokens.dashboard.incomeActiveCount, {
+                      count: activeIncomeEntries.length,
+                    })}
                   </Typography>
                 </Box>
                 <Button
@@ -577,24 +586,52 @@ function FinancialDashboard() {
                   startIcon={<AddOutlined />}
                   variant="contained"
                 >
-                  Gerenciar
+                  {t(tokens.common.manage)}
+                </Button>
+              </Stack>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent>
+              <Stack
+                alignItems={{ xs: "stretch", sm: "center" }}
+                direction={{ xs: "column", sm: "row" }}
+                spacing={2}
+              >
+                <Box sx={{ flexGrow: 1 }}>
+                  <Typography color="text.secondary" variant="body2">
+                    {t(tokens.dashboard.spent)}
+                  </Typography>
+                  <Typography color="error.main" variant="h2">
+                    {centsToCurrency(totals.spent)}
+                  </Typography>
+                </Box>
+                <Button
+                  color="error"
+                  disabled={isSaving}
+                  onClick={() => setExpenseThemeDialogOpen(true)}
+                  startIcon={<AddOutlined />}
+                  variant="outlined"
+                >
+                  {t(tokens.dashboard.addExpense)}
                 </Button>
               </Stack>
             </CardContent>
           </Card>
 
           <MetricCard
-            label="Previstos"
+            label={t(tokens.dashboard.planned)}
             tone="warning"
             value={centsToCurrency(totals.planned)}
           />
           <MetricCard
-            label="Imprevistos"
+            label={t(tokens.dashboard.unexpected)}
             tone="error"
             value={centsToCurrency(totals.unexpected)}
           />
           <MetricCard
-            label="Saldo"
+            label={t(tokens.dashboard.balance)}
             tone={totals.balance < 0 ? "error" : "success"}
             value={centsToCurrency(totals.balance)}
           />
@@ -603,10 +640,39 @@ function FinancialDashboard() {
         <MonthlyComparisonChart data={comparisons} />
 
         {totals.balance < 0 ? (
-          <Alert severity="error">Atencao: voce gastou mais do que ganha neste mes.</Alert>
+          <Alert severity="error">{t(tokens.dashboard.statusOver)}</Alert>
         ) : (
-          <Alert severity="success">Voce esta dentro do orcamento deste mes.</Alert>
+          <Alert severity="success">{t(tokens.dashboard.statusOk)}</Alert>
         )}
+
+        <Stack
+          alignItems={{ xs: "stretch", md: "center" }}
+          direction={{ xs: "column", md: "row" }}
+          justifyContent="space-between"
+          spacing={2}
+        >
+          <Box>
+            <Typography variant="h2">{t(tokens.dashboard.expensesByTheme)}</Typography>
+            <Typography color="text.secondary">
+              {t(tokens.dashboard.expensesByThemeSubtitle)}
+            </Typography>
+          </Box>
+          <Button
+            onClick={() => setExpenseThemeDialogOpen(true)}
+            startIcon={<AddOutlined />}
+            sx={{
+              alignSelf: { xs: "stretch", md: "center" },
+              transition: "transform 160ms ease, box-shadow 160ms ease",
+              "&:hover": {
+                boxShadow: "0 14px 24px rgba(37, 99, 235, 0.22)",
+                transform: "translateY(-2px)",
+              },
+            }}
+            variant="contained"
+          >
+            {t(tokens.dashboard.addExpense)}
+          </Button>
+        </Stack>
 
         <Box
           sx={{
@@ -619,74 +685,80 @@ function FinancialDashboard() {
             },
           }}
         >
-          {themeSummaries.map((summary) => {
-            const progress =
-              summary.recommended_cents > 0
-                ? Math.min((summary.total_cents / summary.recommended_cents) * 100, 140)
-                : 0;
-            const isOver = summary.total_cents > summary.recommended_cents;
+          {themeSummaries.length === 0 ? (
+            <Alert severity="warning" sx={{ gridColumn: "1 / -1" }}>
+              {t(tokens.dashboard.noThemes)}
+            </Alert>
+          ) : (
+            themeSummaries.map((summary) => {
+              const progress =
+                summary.recommended_cents > 0
+                  ? Math.min((summary.total_cents / summary.recommended_cents) * 100, 140)
+                  : 0;
+              const isOver = summary.total_cents > summary.recommended_cents;
 
-            return (
-              <Card
-                key={summary.id}
-                onClick={() => handleOpenTheme(summary)}
-                sx={{
-                  cursor: "pointer",
-                  transition: "border-color 160ms ease, transform 160ms ease",
-                  border: "1px solid",
-                  borderColor: isOver ? "error.light" : "divider",
-                  "&:hover": {
-                    borderColor: "primary.main",
-                    transform: "translateY(-2px)",
-                  },
-                }}
-              >
-                <CardContent>
-                  <Stack spacing={2}>
-                    <Stack direction="row" justifyContent="space-between" spacing={2}>
-                      <Box sx={{ minWidth: 0 }}>
-                        <Typography noWrap variant="h3">
-                          {summary.name}
+              return (
+                <Card
+                  key={summary.id}
+                  onClick={() => handleOpenTheme(summary)}
+                  sx={{
+                    cursor: "pointer",
+                    transition: "border-color 160ms ease, transform 160ms ease",
+                    border: "1px solid",
+                    borderColor: isOver ? "error.light" : "divider",
+                    "&:hover": {
+                      borderColor: "primary.main",
+                      transform: "translateY(-2px)",
+                    },
+                  }}
+                >
+                  <CardContent>
+                    <Stack spacing={2}>
+                      <Stack direction="row" justifyContent="space-between" spacing={2}>
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography noWrap variant="h3">
+                            {summary.name}
+                          </Typography>
+                          <Typography color="text.secondary" noWrap variant="body2">
+                            {summary.description}
+                          </Typography>
+                        </Box>
+                        <Chip
+                          color={isOver ? "error" : "default"}
+                          label={basisPointsToPercentage(summary.default_percentage_bp)}
+                          size="small"
+                        />
+                      </Stack>
+
+                      <Box>
+                        <Typography color="text.secondary" variant="body2">
+                          {t(tokens.dashboard.themeSpent)}
                         </Typography>
-                        <Typography color="text.secondary" noWrap variant="body2">
-                          {summary.description}
+                        <Typography variant="h2">
+                          {centsToCurrency(summary.total_cents)}
                         </Typography>
                       </Box>
-                      <Chip
-                        color={isOver ? "error" : "default"}
-                        label={basisPointsToPercentage(summary.default_percentage_bp)}
-                        size="small"
+
+                      <LinearProgress
+                        color={isOver ? "error" : "primary"}
+                        value={progress}
+                        variant="determinate"
                       />
+
+                      <Stack direction="row" justifyContent="space-between">
+                        <Typography color="text.secondary" variant="body2">
+                          {t(tokens.dashboard.themeRecommended)}
+                        </Typography>
+                        <Typography variant="body2">
+                          {centsToCurrency(summary.recommended_cents)}
+                        </Typography>
+                      </Stack>
                     </Stack>
-
-                    <Box>
-                      <Typography color="text.secondary" variant="body2">
-                        Gasto
-                      </Typography>
-                      <Typography variant="h2">
-                        {centsToCurrency(summary.total_cents)}
-                      </Typography>
-                    </Box>
-
-                    <LinearProgress
-                      color={isOver ? "error" : "primary"}
-                      value={progress}
-                      variant="determinate"
-                    />
-
-                    <Stack direction="row" justifyContent="space-between">
-                      <Typography color="text.secondary" variant="body2">
-                        Recomendado
-                      </Typography>
-                      <Typography variant="body2">
-                        {centsToCurrency(summary.recommended_cents)}
-                      </Typography>
-                    </Stack>
-                  </Stack>
-                </CardContent>
-              </Card>
-            );
-          })}
+                  </CardContent>
+                </Card>
+              );
+            })
+          )}
         </Box>
       </Stack>
 
@@ -735,23 +807,23 @@ function FinancialDashboard() {
       />
 
       <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} fullWidth>
-        <DialogTitle>Cancelar lancamento</DialogTitle>
+        <DialogTitle>{t(tokens.dashboard.cancelExpense)}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
             <Typography color="text.secondary">
-              O item continuara no historico e deixara de entrar no total do tema.
+              {t(tokens.dashboard.deletedExpenseHelp)}
             </Typography>
             <AppTextField
               autoFocus
               fullWidth
-              label="Motivo"
+              label={t(tokens.dashboard.changeReason)}
               onChange={(event) => setDeleteReason(event.target.value)}
               value={deleteReason}
             />
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteTarget(null)}>Voltar</Button>
+          <Button onClick={() => setDeleteTarget(null)}>{t(tokens.common.back)}</Button>
           <Button
             color="error"
             disabled={isSaving}
@@ -759,7 +831,7 @@ function FinancialDashboard() {
             startIcon={<DeleteOutlineOutlined />}
             variant="contained"
           >
-            Cancelar
+            {t(tokens.common.cancel)}
           </Button>
         </DialogActions>
       </Dialog>
@@ -769,23 +841,25 @@ function FinancialDashboard() {
         onClose={() => setIncomeDeleteTarget(null)}
         fullWidth
       >
-        <DialogTitle>Cancelar receita</DialogTitle>
+        <DialogTitle>{t(tokens.dashboard.cancelIncome)}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
             <Typography color="text.secondary">
-              O item continuara no historico e deixara de entrar no total do mes.
+              {t(tokens.dashboard.deletedIncomeHelp)}
             </Typography>
             <AppTextField
               autoFocus
               fullWidth
-              label="Motivo"
+              label={t(tokens.dashboard.changeReason)}
               onChange={(event) => setDeleteReason(event.target.value)}
               value={deleteReason}
             />
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setIncomeDeleteTarget(null)}>Voltar</Button>
+          <Button onClick={() => setIncomeDeleteTarget(null)}>
+            {t(tokens.common.back)}
+          </Button>
           <Button
             color="error"
             disabled={isSaving}
@@ -793,7 +867,54 @@ function FinancialDashboard() {
             startIcon={<DeleteOutlineOutlined />}
             variant="contained"
           >
-            Cancelar
+            {t(tokens.common.cancel)}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        fullWidth
+        maxWidth="sm"
+        onClose={() => setExpenseThemeDialogOpen(false)}
+        open={expenseThemeDialogOpen}
+      >
+        <DialogTitle>{t(tokens.dashboard.selectExpenseTheme)}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Typography color="text.secondary">
+              {t(tokens.dashboard.selectExpenseThemeSubtitle)}
+            </Typography>
+            {themeSummaries.length === 0 ? (
+              <Alert severity="warning">{t(tokens.dashboard.noThemes)}</Alert>
+            ) : (
+              <Stack spacing={1}>
+                {themeSummaries.map((summary) => (
+                  <Button
+                    key={summary.id}
+                    onClick={() => {
+                      setExpenseThemeDialogOpen(false);
+                      handleOpenTheme(summary);
+                    }}
+                    sx={{
+                      justifyContent: "space-between",
+                      py: 1.25,
+                      textAlign: "left",
+                    }}
+                    variant="outlined"
+                  >
+                    <Box component="span" sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {summary.name}
+                    </Box>
+                    <Box component="span">{centsToCurrency(summary.total_cents)}</Box>
+                  </Button>
+                ))}
+              </Stack>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setExpenseThemeDialogOpen(false)}>
+            {t(tokens.common.cancel)}
           </Button>
         </DialogActions>
       </Dialog>
@@ -812,6 +933,7 @@ type MonthlyComparisonChartProps = {
 };
 
 function MonthlyComparisonChart({ data }: MonthlyComparisonChartProps) {
+  const { t } = useTranslation();
   const maxValue = Math.max(
     1,
     ...data.flatMap((month) => [
@@ -832,21 +954,24 @@ function MonthlyComparisonChart({ data }: MonthlyComparisonChartProps) {
             spacing={1}
           >
             <Box>
-              <Typography variant="h3">Comparativo dos meses</Typography>
+              <Typography variant="h3">{t(tokens.dashboard.comparisonTitle)}</Typography>
               <Typography color="text.secondary" variant="body2">
-                Receitas, gastos previstos e imprevistos nos meses anteriores.
+                {t(tokens.dashboard.comparisonSubtitle)}
               </Typography>
             </Box>
             <Stack direction="row" flexWrap="wrap" gap={1}>
-              <LegendDot color={financeColors.income} label="Receitas" />
-              <LegendDot color={financeColors.planned} label="Previstos" />
-              <LegendDot color={financeColors.unexpected} label="Imprevistos" />
+              <LegendDot color={financeColors.income} label={t(tokens.dashboard.income)} />
+              <LegendDot color={financeColors.planned} label={t(tokens.dashboard.planned)} />
+              <LegendDot
+                color={financeColors.unexpected}
+                label={t(tokens.dashboard.unexpected)}
+              />
             </Stack>
           </Stack>
 
           {data.length === 0 ? (
             <Typography color="text.secondary" sx={{ py: 4 }} textAlign="center">
-              Ainda nao ha meses suficientes para comparar.
+              {t(tokens.dashboard.comparisonEmpty)}
             </Typography>
           ) : (
             <Box
@@ -884,19 +1009,19 @@ function MonthlyComparisonChart({ data }: MonthlyComparisonChartProps) {
                     </Stack>
                     <ChartBar
                       color={financeColors.income}
-                      label="Receitas"
+                      label={t(tokens.dashboard.income)}
                       maxValue={maxValue}
                       value={month.income_cents}
                     />
                     <ChartBar
                       color={financeColors.planned}
-                      label="Previstos"
+                      label={t(tokens.dashboard.planned)}
                       maxValue={maxValue}
                       value={month.planned_expense_cents}
                     />
                     <ChartBar
                       color={financeColors.unexpected}
-                      label="Imprevistos"
+                      label={t(tokens.dashboard.unexpected)}
                       maxValue={maxValue}
                       value={month.unexpected_expense_cents}
                     />
@@ -1045,6 +1170,7 @@ function IncomeDrawer({
   open,
   totalCents,
 }: IncomeDrawerProps) {
+  const { t } = useTranslation();
   const visibleEntries = drawerTab === "active" ? activeEntries : deletedEntries;
 
   return (
@@ -1062,9 +1188,9 @@ function IncomeDrawer({
       <Box sx={{ p: 3 }}>
         <Stack spacing={3}>
           <Box>
-            <Typography variant="h2">Receitas do mes</Typography>
+            <Typography variant="h2">{t(tokens.dashboard.income)}</Typography>
             <Typography color="text.secondary">
-              Total ativo: {centsToCurrency(totalCents)}
+              {t(tokens.dashboard.totalActive)}: {centsToCurrency(totalCents)}
             </Typography>
           </Box>
 
@@ -1073,21 +1199,23 @@ function IncomeDrawer({
               <Box component="form" onSubmit={onSubmit}>
                 <Stack spacing={2}>
                   <Typography variant="h3">
-                    {editingEntry ? "Editar receita" : "Nova receita"}
+                    {editingEntry
+                      ? t(tokens.dashboard.editIncome)
+                      : t(tokens.dashboard.newIncome)}
                   </Typography>
                   <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
                     <AppTextField
                       fullWidth
-                      label="Descricao"
+                      label={t(tokens.common.description)}
                       onChange={(event) =>
                         onFormChange({ ...formValues, description: event.target.value })
                       }
-                      placeholder="Salario, bonificacao, extra..."
+                      placeholder={t(tokens.dashboard.incomePlaceholder)}
                       required
                       value={formValues.description}
                     />
                     <MoneyTextField
-                      label="Valor"
+                      label={t(tokens.common.value)}
                       onChange={(event) =>
                         onFormChange({ ...formValues, amount: event })
                       }
@@ -1098,7 +1226,7 @@ function IncomeDrawer({
                   <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
                     <AppTextField
                       fullWidth
-                      label="Data"
+                      label={t(tokens.common.date)}
                       onChange={(event) =>
                         onFormChange({ ...formValues, entryDate: event.target.value })
                       }
@@ -1108,7 +1236,7 @@ function IncomeDrawer({
                     />
                     <AppTextField
                       fullWidth
-                      label="Observacoes"
+                      label={t(tokens.common.notes)}
                       onChange={(event) =>
                         onFormChange({ ...formValues, notes: event.target.value })
                       }
@@ -1118,14 +1246,14 @@ function IncomeDrawer({
                   {editingEntry ? (
                     <AppTextField
                       fullWidth
-                      label="Motivo da alteracao"
+                      label={t(tokens.dashboard.changeReason)}
                       onChange={(event) =>
                         onFormChange({
                           ...formValues,
                           changeReason: event.target.value,
                         })
                       }
-                      placeholder="Opcional"
+                      placeholder={t(tokens.common.optional)}
                       value={formValues.changeReason}
                     />
                   ) : (
@@ -1142,13 +1270,13 @@ function IncomeDrawer({
                             }
                           />
                         }
-                        label="Recorrente"
+                        label={t(tokens.dashboard.recurring)}
                       />
                       {formValues.isRecurring && (
                         <AppTextField
                           fullWidth
-                          helperText="Deixe em branco para repetir sem data final."
-                          label="Repetir ate"
+                          helperText={t(tokens.dashboard.repeatUntilHelp)}
+                          label={t(tokens.dashboard.repeatUntil)}
                           onChange={(event) =>
                             onFormChange({
                               ...formValues,
@@ -1162,14 +1290,16 @@ function IncomeDrawer({
                     </Stack>
                   )}
                   <Stack direction="row" justifyContent="flex-end" spacing={1}>
-                    {editingEntry && <Button onClick={onCancelEdit}>Limpar</Button>}
+                    {editingEntry && (
+                      <Button onClick={onCancelEdit}>{t(tokens.common.clear)}</Button>
+                    )}
                     <Button
                       disabled={isSaving}
                       startIcon={editingEntry ? <SaveOutlined /> : <AddOutlined />}
                       type="submit"
                       variant="contained"
                     >
-                      {editingEntry ? "Salvar" : "Adicionar"}
+                      {editingEntry ? t(tokens.common.save) : t(tokens.common.add)}
                     </Button>
                   </Stack>
                 </Stack>
@@ -1182,11 +1312,18 @@ function IncomeDrawer({
               onChange={(_event, value: "active" | "deleted") => onTabChange(value)}
               value={drawerTab}
             >
-              <Tab label={`Ativas (${activeEntries.length})`} value="active" />
+              <Tab
+                label={t(tokens.dashboard.incomeActiveTab, {
+                  count: activeEntries.length,
+                })}
+                value="active"
+              />
               <Tab
                 icon={<HistoryOutlined />}
                 iconPosition="start"
-                label={`Canceladas (${deletedEntries.length})`}
+                label={t(tokens.dashboard.incomeCanceledTab, {
+                  count: deletedEntries.length,
+                })}
                 value="deleted"
               />
             </Tabs>
@@ -1196,10 +1333,10 @@ function IncomeDrawer({
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Descricao</TableCell>
-                <TableCell>Data</TableCell>
-                <TableCell align="right">Valor</TableCell>
-                <TableCell align="right">Acoes</TableCell>
+                <TableCell>{t(tokens.common.description)}</TableCell>
+                <TableCell>{t(tokens.common.date)}</TableCell>
+                <TableCell align="right">{t(tokens.common.value)}</TableCell>
+                <TableCell align="right">{t(tokens.common.actions)}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -1216,7 +1353,7 @@ function IncomeDrawer({
                     <Stack direction="row" spacing={1} alignItems="center">
                       <Typography variant="body2">{entry.description}</Typography>
                       <Chip
-                        label="Receita"
+                        label={t(tokens.dashboard.income)}
                         size="small"
                         sx={{
                           bgcolor: financeColors.incomeSoft,
@@ -1238,12 +1375,12 @@ function IncomeDrawer({
                   <TableCell align="right">
                     {drawerTab === "active" ? (
                       <Stack direction="row" justifyContent="flex-end" spacing={0.5}>
-                        <Tooltip title="Editar">
+                        <Tooltip title={t(tokens.common.edit)}>
                           <IconButton onClick={() => onEdit(entry)} size="small">
                             <EditOutlined fontSize="small" />
                           </IconButton>
                         </Tooltip>
-                        <Tooltip title="Cancelar">
+                        <Tooltip title={t(tokens.common.cancel)}>
                           <IconButton
                             color="error"
                             onClick={() => onDelete(entry)}
@@ -1254,7 +1391,7 @@ function IncomeDrawer({
                         </Tooltip>
                       </Stack>
                     ) : (
-                      <Tooltip title="Restaurar">
+                      <Tooltip title={t(tokens.common.restore)}>
                         <IconButton onClick={() => onRestore(entry)} size="small">
                           <ReplayOutlined fontSize="small" />
                         </IconButton>
@@ -1267,7 +1404,7 @@ function IncomeDrawer({
                 <TableRow>
                   <TableCell colSpan={4}>
                     <Typography color="text.secondary" sx={{ py: 3 }} textAlign="center">
-                      Nenhuma receita encontrada.
+                      {t(tokens.dashboard.incomeNotFound)}
                     </Typography>
                   </TableCell>
                 </TableRow>
@@ -1317,6 +1454,7 @@ function EntryDrawer({
   open,
   theme,
 }: EntryDrawerProps) {
+  const { t } = useTranslation();
   const visibleEntries = drawerTab === "active" ? activeEntries : deletedEntries;
 
   return (
@@ -1336,7 +1474,7 @@ function EntryDrawer({
           <Box>
             <Typography variant="h2">{theme?.name}</Typography>
             <Typography color="text.secondary">
-              Total ativo: {centsToCurrency(theme?.total_cents ?? 0)}
+              {t(tokens.dashboard.totalActive)}: {centsToCurrency(theme?.total_cents ?? 0)}
             </Typography>
           </Box>
 
@@ -1345,12 +1483,14 @@ function EntryDrawer({
               <Box component="form" onSubmit={onSubmit}>
                 <Stack spacing={2}>
                   <Typography variant="h3">
-                    {editingEntry ? "Editar lancamento" : "Novo lancamento"}
+                    {editingEntry
+                      ? t(tokens.dashboard.editExpense)
+                      : t(tokens.dashboard.newExpense)}
                   </Typography>
                   <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
                     <AppTextField
                       fullWidth
-                      label="Descricao"
+                      label={t(tokens.common.description)}
                       onChange={(event) =>
                         onFormChange({ ...formValues, description: event.target.value })
                       }
@@ -1358,7 +1498,7 @@ function EntryDrawer({
                       value={formValues.description}
                     />
                     <MoneyTextField
-                      label="Valor"
+                      label={t(tokens.common.value)}
                       onChange={(event) =>
                         onFormChange({ ...formValues, amount: event })
                       }
@@ -1369,7 +1509,7 @@ function EntryDrawer({
                   <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
                     <AppTextField
                       fullWidth
-                      label="Data"
+                      label={t(tokens.common.date)}
                       onChange={(event) =>
                         onFormChange({ ...formValues, entryDate: event.target.value })
                       }
@@ -1379,7 +1519,7 @@ function EntryDrawer({
                     />
                     <AppTextField
                       fullWidth
-                      label="Observacoes"
+                      label={t(tokens.common.notes)}
                       onChange={(event) =>
                         onFormChange({ ...formValues, notes: event.target.value })
                       }
@@ -1389,14 +1529,14 @@ function EntryDrawer({
                   {editingEntry ? (
                     <AppTextField
                       fullWidth
-                      label="Motivo da alteracao"
+                      label={t(tokens.dashboard.changeReason)}
                       onChange={(event) =>
                         onFormChange({
                           ...formValues,
                           changeReason: event.target.value,
                         })
                       }
-                      placeholder="Opcional"
+                      placeholder={t(tokens.common.optional)}
                       value={formValues.changeReason}
                     />
                   ) : (
@@ -1413,13 +1553,13 @@ function EntryDrawer({
                             }
                           />
                         }
-                        label="Recorrente"
+                        label={t(tokens.dashboard.recurring)}
                       />
                       {formValues.isRecurring && (
                         <AppTextField
                           fullWidth
-                          helperText="Deixe em branco para repetir sem data final."
-                          label="Repetir ate"
+                          helperText={t(tokens.dashboard.repeatUntilHelp)}
+                          label={t(tokens.dashboard.repeatUntil)}
                           onChange={(event) =>
                             onFormChange({
                               ...formValues,
@@ -1434,7 +1574,7 @@ function EntryDrawer({
                   )}
                   <Stack direction="row" justifyContent="flex-end" spacing={1}>
                     {editingEntry && (
-                      <Button onClick={onCancelEdit}>Limpar</Button>
+                      <Button onClick={onCancelEdit}>{t(tokens.common.clear)}</Button>
                     )}
                     <Button
                       disabled={isSaving}
@@ -1442,7 +1582,7 @@ function EntryDrawer({
                       type="submit"
                       variant="contained"
                     >
-                      {editingEntry ? "Salvar" : "Adicionar"}
+                      {editingEntry ? t(tokens.common.save) : t(tokens.common.add)}
                     </Button>
                   </Stack>
                 </Stack>
@@ -1455,11 +1595,18 @@ function EntryDrawer({
               onChange={(_event, value: "active" | "deleted") => onTabChange(value)}
               value={drawerTab}
             >
-              <Tab label={`Ativos (${activeEntries.length})`} value="active" />
+              <Tab
+                label={t(tokens.dashboard.expenseActiveTab, {
+                  count: activeEntries.length,
+                })}
+                value="active"
+              />
               <Tab
                 icon={<HistoryOutlined />}
                 iconPosition="start"
-                label={`Cancelados (${deletedEntries.length})`}
+                label={t(tokens.dashboard.expenseCanceledTab, {
+                  count: deletedEntries.length,
+                })}
                 value="deleted"
               />
             </Tabs>
@@ -1469,10 +1616,10 @@ function EntryDrawer({
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Descricao</TableCell>
-                <TableCell>Data</TableCell>
-                <TableCell align="right">Valor</TableCell>
-                <TableCell align="right">Acoes</TableCell>
+                <TableCell>{t(tokens.common.description)}</TableCell>
+                <TableCell>{t(tokens.common.date)}</TableCell>
+                <TableCell align="right">{t(tokens.common.value)}</TableCell>
+                <TableCell align="right">{t(tokens.common.actions)}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -1498,7 +1645,11 @@ function EntryDrawer({
                     <Stack direction="row" spacing={1} alignItems="center">
                       <Typography variant="body2">{entry.description}</Typography>
                       <Chip
-                        label={isPlanned ? "Previsto" : "Imprevisto"}
+                        label={
+                          isPlanned
+                            ? t(tokens.dashboard.planned)
+                            : t(tokens.dashboard.unexpected)
+                        }
                         size="small"
                         sx={{
                           bgcolor: softColor,
@@ -1520,12 +1671,12 @@ function EntryDrawer({
                   <TableCell align="right">
                     {drawerTab === "active" ? (
                       <Stack direction="row" justifyContent="flex-end" spacing={0.5}>
-                        <Tooltip title="Editar">
+                        <Tooltip title={t(tokens.common.edit)}>
                           <IconButton onClick={() => onEdit(entry)} size="small">
                             <EditOutlined fontSize="small" />
                           </IconButton>
                         </Tooltip>
-                        <Tooltip title="Cancelar">
+                        <Tooltip title={t(tokens.common.cancel)}>
                           <IconButton
                             color="error"
                             onClick={() => onDelete(entry)}
@@ -1536,7 +1687,7 @@ function EntryDrawer({
                         </Tooltip>
                       </Stack>
                     ) : (
-                      <Tooltip title="Restaurar">
+                      <Tooltip title={t(tokens.common.restore)}>
                         <IconButton onClick={() => onRestore(entry)} size="small">
                           <ReplayOutlined fontSize="small" />
                         </IconButton>
@@ -1550,7 +1701,7 @@ function EntryDrawer({
                 <TableRow>
                   <TableCell colSpan={4}>
                     <Typography color="text.secondary" sx={{ py: 3 }} textAlign="center">
-                      Nenhum lancamento encontrado.
+                      {t(tokens.dashboard.entryNotFound)}
                     </Typography>
                   </TableCell>
                 </TableRow>

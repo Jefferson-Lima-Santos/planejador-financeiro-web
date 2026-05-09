@@ -10,7 +10,7 @@ const languageOptions: Record<Language, { flag: string; label: string; htmlLang:
   ptBR: {
     flag: "/assets/flags/pt_BR.svg",
     htmlLang: "pt-BR",
-    label: "Portugues (Brasil)",
+    label: "Português (Brasil)",
   },
   en: {
     flag: "/assets/flags/en_US.svg",

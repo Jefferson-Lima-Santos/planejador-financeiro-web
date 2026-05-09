@@ -43,7 +43,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   };
 
   const name =
-    user?.user_metadata?.name || user?.email?.split("@")[0] || "Usuario";
+    user?.user_metadata?.name || user?.email?.split("@")[0] || "Usuário";
 
   return (
     <Box sx={{ minHeight: "100vh" }}>

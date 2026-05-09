@@ -9,7 +9,9 @@ import type {
 
 const requireSupabase = () => {
   if (!supabase) {
-    throw new Error("Supabase nao configurado. Crie o .env.local.");
+    throw new Error(
+      "Não foi possível conectar o serviço agora. Confira a configuração e tente novamente."
+    );
   }
 
   return supabase;
@@ -20,7 +22,7 @@ const requireAuthenticatedUserId = async (): Promise<string> => {
   const { data, error } = await client.auth.getUser();
 
   if (error || !data.user) {
-    throw new Error("Sua sessao expirou. Entre novamente para continuar.");
+    throw new Error("Sua sessão expirou. Entre novamente para continuar.");
   }
 
   return data.user.id;
