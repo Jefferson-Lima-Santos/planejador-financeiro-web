@@ -54,6 +54,7 @@ export default function LoginPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [errorText, setErrorText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -68,6 +69,7 @@ export default function LoginPage() {
       email: "",
       name: "",
       password: "",
+      passwordConfirmation: "",
     };
 
     if (mode === "signUp" && !name.trim()) {
@@ -86,10 +88,22 @@ export default function LoginPage() {
       nextErrors.password = t(tokens.auth.passwordMin);
     }
 
-    return nextErrors;
-  }, [email, mode, name, password, t]);
+    if (mode === "signUp") {
+      if (!passwordConfirmation) {
+        nextErrors.passwordConfirmation = t(tokens.auth.passwordConfirmationRequired);
+      } else if (passwordConfirmation !== password) {
+        nextErrors.passwordConfirmation = t(tokens.auth.passwordConfirmationMismatch);
+      }
+    }
 
-  const isFormValid = !errors.email && !errors.password && !errors.name;
+    return nextErrors;
+  }, [email, mode, name, password, passwordConfirmation, t]);
+
+  const isFormValid =
+    !errors.email &&
+    !errors.password &&
+    !errors.name &&
+    !errors.passwordConfirmation;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -98,7 +112,11 @@ export default function LoginPage() {
 
     if (!isFormValid) {
       setErrorText(
-        errors.email || errors.password || errors.name || t(tokens.auth.errors.generic)
+        errors.email ||
+          errors.password ||
+          errors.passwordConfirmation ||
+          errors.name ||
+          t(tokens.auth.errors.generic)
       );
       return;
     }
@@ -320,6 +338,22 @@ export default function LoginPage() {
                     type="password"
                     value={password}
                   />
+                  {mode === "signUp" && (
+                    <TextField
+                      autoComplete="new-password"
+                      error={hasSubmitted && Boolean(errors.passwordConfirmation)}
+                      fullWidth
+                      helperText={hasSubmitted ? errors.passwordConfirmation : ""}
+                      label={t(tokens.auth.passwordConfirmation)}
+                      onChange={(event) => {
+                        setPasswordConfirmation(event.target.value);
+                        setErrorText("");
+                      }}
+                      required
+                      type="password"
+                      value={passwordConfirmation}
+                    />
+                  )}
                   <Button
                     disabled={isSubmitting || !isSupabaseConfigured || !isFormValid}
                     fullWidth
