@@ -279,13 +279,14 @@ export async function listAuditLogsForRecord(
   recordId: string
 ): Promise<AuditLog[]> {
   const client = requireSupabase();
-  await requireAuthenticatedUserId();
+  const authenticatedUserId = await requireAuthenticatedUserId();
 
   const { data, error } = await client
     .from("audit_logs")
     .select(
       "id, table_name, record_id, action, reason, old_values, new_values, created_at"
     )
+    .eq("user_id", authenticatedUserId)
     .eq("table_name", tableName)
     .eq("record_id", recordId)
     .order("created_at", { ascending: false });

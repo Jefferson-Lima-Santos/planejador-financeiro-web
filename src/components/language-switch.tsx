@@ -1,10 +1,10 @@
 import { useCallback, useState } from "react";
 import { Box, IconButton, MenuItem, Popover, Stack, Tooltip, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
+import { useRecoilState } from "recoil";
 import toast from "react-hot-toast";
 import { tokens } from "@/locales/tokens";
-
-type Language = "ptBR" | "en";
+import { languageAtom, type Language } from "@/state/atoms/settings";
 
 const languageOptions: Record<Language, { flag: string; label: string; htmlLang: string }> = {
   ptBR: {
@@ -22,20 +22,22 @@ const languageOptions: Record<Language, { flag: string; label: string; htmlLang:
 export function LanguageSwitch() {
   const { i18n, t } = useTranslation();
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  const [savedLanguage, setSavedLanguage] = useRecoilState(languageAtom);
   const currentLanguage = (i18n.language in languageOptions
     ? i18n.language
-    : "ptBR") as Language;
+    : savedLanguage) as Language;
   const currentOption = languageOptions[currentLanguage];
 
   const handleChange = useCallback(
     async (language: Language) => {
       await i18n.changeLanguage(language);
       localStorage.setItem("language", language);
+      setSavedLanguage(language);
       document.documentElement.lang = languageOptions[language].htmlLang;
       setAnchorEl(null);
       toast.success(t(tokens.common.languageChanged));
     },
-    [i18n, t]
+    [i18n, setSavedLanguage, t]
   );
 
   return (

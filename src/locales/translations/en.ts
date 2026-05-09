@@ -118,4 +118,13 @@ export const en = {
   [tokens.dashboard.themeSpent]: "Spent",
   [tokens.dashboard.totalActive]: "Active total",
   [tokens.dashboard.unexpected]: "Unexpected",
+
+  [tokens.dashboard.historyTitle]: "History",
+  [tokens.dashboard.historyEmpty]: "No changes recorded yet.",
+  [tokens.dashboard.historyChangedFields]: "Changes",
+  [tokens.dashboard.auditInsert]: "Created",
+  [tokens.dashboard.auditUpdate]: "Updated",
+  [tokens.dashboard.auditSoftDelete]: "Canceled",
+  [tokens.dashboard.auditRestore]: "Restored",
+  [tokens.dashboard.auditDelete]: "Deleted",
 };

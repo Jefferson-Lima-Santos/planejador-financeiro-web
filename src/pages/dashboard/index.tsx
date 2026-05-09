@@ -117,6 +117,12 @@ const financeColors = {
   unexpectedSoft: "rgba(185, 28, 28, 0.1)",
 };
 
+const sortAuditLogs = (logs: AuditLog[]) =>
+  [...logs].sort(
+    (first, second) =>
+      new Date(second.created_at).getTime() - new Date(first.created_at).getTime()
+  );
+
 export default function DashboardPage() {
   return (
     <AuthGuard>
@@ -282,6 +288,7 @@ function FinancialDashboard() {
   };
 
   const handleEditIncomeEntry = (entry: MonthlyIncomeEntry) => {
+    setIncomeAuditLogs([]);
     setEditingIncomeEntry(entry);
     setIncomeFormValues({
       amount: centsToInputValue(entry.amount_cents),
@@ -302,8 +309,15 @@ function FinancialDashboard() {
 
     setIncomeAuditLoading(true);
 
-    listAuditLogsForRecord("monthly_income_entries", editingIncomeEntry.id)
-      .then((logs) => setIncomeAuditLogs(logs))
+    Promise.all([
+      listAuditLogsForRecord("monthly_income_entries", editingIncomeEntry.id),
+      editingIncomeEntry.recurring_entry_id
+        ? listAuditLogsForRecord("recurring_entries", editingIncomeEntry.recurring_entry_id)
+        : Promise.resolve([]),
+    ])
+      .then(([entryLogs, recurringLogs]) =>
+        setIncomeAuditLogs(sortAuditLogs([...entryLogs, ...recurringLogs]))
+      )
       .catch((error) => {
         toast.error(
           error instanceof Error ? error.message : t(tokens.dashboard.loadDataError)
@@ -359,6 +373,7 @@ function FinancialDashboard() {
   };
 
   const handleEditEntry = (entry: MonthlyThemeEntry) => {
+    setExpenseAuditLogs([]);
     setEditingEntry(entry);
     setFormValues({
       amount: centsToInputValue(entry.amount_cents),
@@ -405,8 +420,15 @@ function FinancialDashboard() {
 
     setExpenseAuditLoading(true);
 
-    listAuditLogsForRecord("monthly_theme_entries", editingEntry.id)
-      .then((logs) => setExpenseAuditLogs(logs))
+    Promise.all([
+      listAuditLogsForRecord("monthly_theme_entries", editingEntry.id),
+      editingEntry.recurring_entry_id
+        ? listAuditLogsForRecord("recurring_entries", editingEntry.recurring_entry_id)
+        : Promise.resolve([]),
+    ])
+      .then(([entryLogs, recurringLogs]) =>
+        setExpenseAuditLogs(sortAuditLogs([...entryLogs, ...recurringLogs]))
+      )
       .catch((error) => {
         toast.error(
           error instanceof Error ? error.message : t(tokens.dashboard.loadDataError)

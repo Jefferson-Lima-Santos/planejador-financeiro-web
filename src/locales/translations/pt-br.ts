@@ -119,4 +119,13 @@ export const ptBR = {
   [tokens.dashboard.themeSpent]: "Gasto",
   [tokens.dashboard.totalActive]: "Total ativo",
   [tokens.dashboard.unexpected]: "Imprevistos",
+
+  [tokens.dashboard.historyTitle]: "Histórico",
+  [tokens.dashboard.historyEmpty]: "Nenhuma alteração registrada ainda.",
+  [tokens.dashboard.historyChangedFields]: "Alterações",
+  [tokens.dashboard.auditInsert]: "Criado",
+  [tokens.dashboard.auditUpdate]: "Atualizado",
+  [tokens.dashboard.auditSoftDelete]: "Cancelado",
+  [tokens.dashboard.auditRestore]: "Restaurado",
+  [tokens.dashboard.auditDelete]: "Excluído",
 };

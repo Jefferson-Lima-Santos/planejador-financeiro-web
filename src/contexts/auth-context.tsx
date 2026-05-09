@@ -7,8 +7,15 @@ import {
   useMemo,
   useState,
 } from "react";
-import type { Session, User } from "@supabase/supabase-js";
+import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
+import { useSetRecoilState } from "recoil";
 import { supabase } from "@/lib/supabase";
+import {
+  authSessionAtom,
+  authTokenExpiresAtAtom,
+  authTokenRefreshTickAtom,
+  authUserAtom,
+} from "@/state/atoms/auth";
 
 type AuthContextValue = {
   user: User | null;
@@ -30,6 +37,36 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [session, setSession] = useState<Session | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
+  const setAuthSession = useSetRecoilState(authSessionAtom);
+  const setAuthUser = useSetRecoilState(authUserAtom);
+  const setAuthTokenExpiresAt = useSetRecoilState(authTokenExpiresAtAtom);
+  const setAuthTokenRefreshTick = useSetRecoilState(authTokenRefreshTickAtom);
+
+  const syncSession = useCallback(
+    (nextSession: Session | null) => {
+      setSession(nextSession);
+      setAuthSession(nextSession);
+      setAuthUser(nextSession?.user ?? null);
+      setAuthTokenExpiresAt(
+        typeof nextSession?.expires_at === "number"
+          ? nextSession.expires_at * 1000
+          : null
+      );
+    },
+    [setAuthSession, setAuthTokenExpiresAt, setAuthUser]
+  );
+
+  const handleAuthChange = useCallback(
+    (event: AuthChangeEvent, nextSession: Session | null) => {
+      syncSession(nextSession);
+
+      if (event === "TOKEN_REFRESHED") {
+        setAuthTokenRefreshTick(Date.now());
+      }
+    },
+    [setAuthTokenRefreshTick, syncSession]
+  );
+
   useEffect(() => {
     if (!supabase) {
       setIsInitialized(true);
@@ -37,18 +74,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
+      syncSession(data.session);
       setIsInitialized(true);
     });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      handleAuthChange(event, nextSession);
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [handleAuthChange, syncSession]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     if (!supabase) {
@@ -94,7 +131,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const signOut = useCallback(async () => {
     if (!supabase) {
-      setSession(null);
+      syncSession(null);
       return;
     }
 
@@ -103,7 +140,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (error) {
       throw error;
     }
-  }, []);
+  }, [syncSession]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

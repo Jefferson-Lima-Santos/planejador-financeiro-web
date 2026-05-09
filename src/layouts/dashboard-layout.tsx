@@ -1,14 +1,12 @@
 import type { ReactNode } from "react";
 import {
   AccountBalanceWalletOutlined,
-  CalendarMonthOutlined,
   LogoutOutlined,
 } from "@mui/icons-material";
 import {
   AppBar,
   Avatar,
   Box,
-  Button,
   Container,
   Divider,
   IconButton,
@@ -54,7 +52,21 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         sx={{ borderBottom: "1px solid", borderColor: "divider" }}
       >
         <Toolbar sx={{ minHeight: 68 }}>
-          <Stack alignItems="center" direction="row" spacing={1.5}>
+          <Stack
+            alignItems="center"
+            direction="row"
+            spacing={1.5}
+            onClick={() => router.push("/dashboard")}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                router.push("/dashboard");
+              }
+            }}
+            sx={{ cursor: "pointer" }}
+          >
             <Avatar sx={{ bgcolor: "primary.main" }}>
               <AccountBalanceWalletOutlined />
             </Avatar>
@@ -74,13 +86,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             divider={<Divider flexItem orientation="vertical" />}
             spacing={2}
           >
-            <Button
-              color="inherit"
-              startIcon={<CalendarMonthOutlined />}
-              sx={{ display: { xs: "none", sm: "inline-flex" } }}
-            >
-              {t(tokens.common.dashboard)}
-            </Button>
             <LanguageSwitch />
             <Stack alignItems="center" direction="row" spacing={1}>
               <Avatar sx={{ height: 32, width: 32 }}>

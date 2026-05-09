@@ -114,5 +114,14 @@ export const tokens = {
     themeSpent: "dashboard.themeSpent",
     totalActive: "dashboard.totalActive",
     unexpected: "dashboard.unexpected",
+
+    historyTitle: "dashboard.historyTitle",
+    historyEmpty: "dashboard.historyEmpty",
+    historyChangedFields: "dashboard.historyChangedFields",
+    auditInsert: "dashboard.auditInsert",
+    auditUpdate: "dashboard.auditUpdate",
+    auditSoftDelete: "dashboard.auditSoftDelete",
+    auditRestore: "dashboard.auditRestore",
+    auditDelete: "dashboard.auditDelete",
   },
 };
