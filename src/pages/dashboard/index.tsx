@@ -1457,6 +1457,21 @@ function EntryDrawer({
   const { t } = useTranslation();
   const visibleEntries = drawerTab === "active" ? activeEntries : deletedEntries;
 
+  const handleEditClick = (entry: MonthlyThemeEntry) => {
+    onEdit(entry);
+
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      document
+        .getElementById("expense-entry-form")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      (document.getElementById("expense-description") as HTMLInputElement | null)?.focus();
+    });
+  };
+
   return (
     <Drawer
       anchor="right"
@@ -1480,7 +1495,7 @@ function EntryDrawer({
 
           <Card variant="outlined">
             <CardContent>
-              <Box component="form" onSubmit={onSubmit}>
+              <Box component="form" id="expense-entry-form" onSubmit={onSubmit}>
                 <Stack spacing={2}>
                   <Typography variant="h3">
                     {editingEntry
@@ -1489,6 +1504,7 @@ function EntryDrawer({
                   </Typography>
                   <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
                     <AppTextField
+                      id="expense-description"
                       fullWidth
                       label={t(tokens.common.description)}
                       onChange={(event) =>
@@ -1672,7 +1688,7 @@ function EntryDrawer({
                     {drawerTab === "active" ? (
                       <Stack direction="row" justifyContent="flex-end" spacing={0.5}>
                         <Tooltip title={t(tokens.common.edit)}>
-                          <IconButton onClick={() => onEdit(entry)} size="small">
+                          <IconButton onClick={() => handleEditClick(entry)} size="small">
                             <EditOutlined fontSize="small" />
                           </IconButton>
                         </Tooltip>
