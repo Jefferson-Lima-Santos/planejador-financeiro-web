@@ -128,6 +128,9 @@ create table if not exists public.audit_logs (
   created_at timestamptz not null default now()
 );
 
+create index if not exists idx_audit_logs_record
+  on public.audit_logs(table_name, record_id, created_at desc);
+
 alter table public.profiles enable row level security;
 alter table public.budget_months enable row level security;
 alter table public.monthly_income_entries enable row level security;
@@ -248,12 +251,13 @@ declare
   actor_id uuid;
   row_id uuid;
   reason_text text;
+  old_deleted_at text;
+  new_deleted_at text;
 begin
   if tg_op = 'INSERT' then
     action_name := 'INSERT';
-    actor_id := coalesce((to_jsonb(new)->>'user_id')::uuid, auth.uid());
+    actor_id := coalesce(nullif(to_jsonb(new)->>'user_id', '')::uuid, auth.uid());
     row_id := new.id;
-
     reason_text := coalesce(to_jsonb(new)->>'change_reason', to_jsonb(new)->>'deleted_reason');
 
     insert into public.audit_logs (user_id, table_name, record_id, action, reason, old_values, new_values)
@@ -263,15 +267,18 @@ begin
   end if;
 
   if tg_op = 'UPDATE' then
-    if old.deleted_at is null and new.deleted_at is not null then
+    old_deleted_at := to_jsonb(old)->>'deleted_at';
+    new_deleted_at := to_jsonb(new)->>'deleted_at';
+
+    if old_deleted_at is null and new_deleted_at is not null then
       action_name := 'SOFT_DELETE';
-    elsif old.deleted_at is not null and new.deleted_at is null then
+    elsif old_deleted_at is not null and new_deleted_at is null then
       action_name := 'RESTORE';
     else
       action_name := 'UPDATE';
     end if;
 
-    actor_id := coalesce((to_jsonb(new)->>'user_id')::uuid, auth.uid());
+    actor_id := coalesce(nullif(to_jsonb(new)->>'user_id', '')::uuid, auth.uid());
     row_id := new.id;
     reason_text := coalesce(to_jsonb(new)->>'change_reason', to_jsonb(new)->>'deleted_reason');
 
@@ -282,9 +289,8 @@ begin
   end if;
 
   action_name := 'DELETE';
-  actor_id := coalesce((to_jsonb(old)->>'user_id')::uuid, auth.uid());
+  actor_id := coalesce(nullif(to_jsonb(old)->>'user_id', '')::uuid, auth.uid());
   row_id := old.id;
-
   reason_text := coalesce(to_jsonb(old)->>'change_reason', to_jsonb(old)->>'deleted_reason');
 
   insert into public.audit_logs (user_id, table_name, record_id, action, reason, old_values, new_values)
