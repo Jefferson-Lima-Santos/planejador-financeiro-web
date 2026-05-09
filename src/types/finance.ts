@@ -32,6 +32,20 @@ export type MonthlyThemeEntry = {
   deleted_reason: string | null;
 };
 
+export type MonthlyIncomeEntry = {
+  id: string;
+  user_id: string;
+  budget_month_id: string;
+  description: string;
+  amount_cents: number;
+  received_date: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string | null;
+  deleted_at: string | null;
+  deleted_reason: string | null;
+};
+
 export type ThemeSummary = BudgetTheme & {
   total_cents: number;
   recommended_cents: number;

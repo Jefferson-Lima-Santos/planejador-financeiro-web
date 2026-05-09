@@ -2,6 +2,7 @@ import { supabase } from "@/lib/supabase";
 import type {
   BudgetMonth,
   BudgetTheme,
+  MonthlyIncomeEntry,
   MonthlyThemeEntry,
 } from "@/types/finance";
 
@@ -102,19 +103,106 @@ export async function listMonthEntries(
   return (data ?? []) as MonthlyThemeEntry[];
 }
 
-export async function updateMonthSalary(
-  budgetMonthId: string,
-  salaryCents: number
+export async function listMonthIncomeEntries(
+  budgetMonthId: string
+): Promise<MonthlyIncomeEntry[]> {
+  const client = requireSupabase();
+
+  const { data, error } = await client
+    .from("monthly_income_entries")
+    .select("*")
+    .eq("budget_month_id", budgetMonthId)
+    .order("received_date", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []) as MonthlyIncomeEntry[];
+}
+
+export async function createIncomeEntry(input: {
+  budgetMonthId: string;
+  description: string;
+  amountCents: number;
+  receivedDate: string;
+  notes?: string;
+}): Promise<void> {
+  const client = requireSupabase();
+  const authenticatedUserId = await requireAuthenticatedUserId();
+
+  const { error } = await client.from("monthly_income_entries").insert({
+    user_id: authenticatedUserId,
+    budget_month_id: input.budgetMonthId,
+    description: input.description,
+    amount_cents: input.amountCents,
+    received_date: input.receivedDate,
+    notes: input.notes || null,
+  });
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function updateIncomeEntry(input: {
+  entryId: string;
+  description: string;
+  amountCents: number;
+  receivedDate: string;
+  notes?: string;
+}): Promise<void> {
+  const client = requireSupabase();
+
+  const { error } = await client
+    .from("monthly_income_entries")
+    .update({
+      description: input.description,
+      amount_cents: input.amountCents,
+      received_date: input.receivedDate,
+      notes: input.notes || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.entryId);
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function softDeleteIncomeEntry(
+  entryId: string,
+  reason: string
 ): Promise<void> {
   const client = requireSupabase();
 
   const { error } = await client
-    .from("budget_months")
+    .from("monthly_income_entries")
     .update({
-      salary_cents: salaryCents,
+      deleted_at: new Date().toISOString(),
+      deleted_reason: reason || null,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", budgetMonthId);
+    .eq("id", entryId)
+    .is("deleted_at", null);
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function restoreIncomeEntry(entryId: string): Promise<void> {
+  const client = requireSupabase();
+
+  const { error } = await client
+    .from("monthly_income_entries")
+    .update({
+      deleted_at: null,
+      deleted_reason: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", entryId);
 
   if (error) {
     throw error;

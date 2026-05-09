@@ -46,18 +46,23 @@ import { DashboardLayout } from "@/layouts/dashboard-layout";
 import { useAuth } from "@/contexts/auth-context";
 import {
   createEntry,
+  createIncomeEntry,
   ensureBudgetMonth,
   listBudgetThemes,
+  listMonthIncomeEntries,
   listMonthEntries,
+  restoreIncomeEntry,
   restoreEntry,
+  softDeleteIncomeEntry,
   softDeleteEntry,
+  updateIncomeEntry,
   updateEntry,
-  updateMonthSalary,
 } from "@/lib/finance-repository";
 import type {
   BudgetMonth,
   BudgetTheme,
   EntryFormValues,
+  MonthlyIncomeEntry,
   MonthlyThemeEntry,
   ThemeSummary,
 } from "@/types/finance";
@@ -78,6 +83,13 @@ const emptyEntryForm = (themeId = ""): EntryFormValues & { themeId: string } => 
   themeId,
 });
 
+const emptyIncomeForm = (): EntryFormValues => ({
+  amount: "",
+  description: "",
+  entryDate: dayjs().format("YYYY-MM-DD"),
+  notes: "",
+});
+
 export default function DashboardPage() {
   return (
     <AuthGuard>
@@ -94,12 +106,19 @@ function FinancialDashboard() {
   const [budgetMonth, setBudgetMonth] = useState<BudgetMonth | null>(null);
   const [themes, setThemes] = useState<BudgetTheme[]>([]);
   const [entries, setEntries] = useState<MonthlyThemeEntry[]>([]);
-  const [salaryInput, setSalaryInput] = useState("0,00");
+  const [incomeEntries, setIncomeEntries] = useState<MonthlyIncomeEntry[]>([]);
+  const [incomeDrawerOpen, setIncomeDrawerOpen] = useState(false);
+  const [incomeDrawerTab, setIncomeDrawerTab] = useState<"active" | "deleted">("active");
+  const [incomeFormValues, setIncomeFormValues] = useState(emptyIncomeForm());
+  const [editingIncomeEntry, setEditingIncomeEntry] =
+    useState<MonthlyIncomeEntry | null>(null);
   const [selectedTheme, setSelectedTheme] = useState<ThemeSummary | null>(null);
   const [drawerTab, setDrawerTab] = useState<"active" | "deleted">("active");
   const [formValues, setFormValues] = useState(emptyEntryForm());
   const [editingEntry, setEditingEntry] = useState<MonthlyThemeEntry | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MonthlyThemeEntry | null>(null);
+  const [incomeDeleteTarget, setIncomeDeleteTarget] =
+    useState<MonthlyIncomeEntry | null>(null);
   const [deleteReason, setDeleteReason] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -117,15 +136,16 @@ function FinancialDashboard() {
         currentMonth.year(),
         currentMonth.month() + 1
       );
-      const [themeRows, entryRows] = await Promise.all([
+      const [themeRows, entryRows, incomeRows] = await Promise.all([
         listBudgetThemes(),
         listMonthEntries(month.id),
+        listMonthIncomeEntries(month.id),
       ]);
 
       setBudgetMonth(month);
       setThemes(themeRows);
       setEntries(entryRows);
-      setSalaryInput(centsToInputValue(month.salary_cents));
+      setIncomeEntries(incomeRows);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro ao carregar dados.");
     } finally {
@@ -142,15 +162,31 @@ function FinancialDashboard() {
     [entries]
   );
 
-  const themeSummaries = useMemo<ThemeSummary[]>(() => {
-    const salary = budgetMonth?.salary_cents ?? 0;
+  const activeIncomeEntries = useMemo(
+    () => incomeEntries.filter((entry) => !entry.deleted_at),
+    [incomeEntries]
+  );
 
+  const deletedIncomeEntries = useMemo(
+    () => incomeEntries.filter((entry) => entry.deleted_at),
+    [incomeEntries]
+  );
+
+  const incomeTotalCents = useMemo(
+    () => activeIncomeEntries.reduce((sum, entry) => sum + entry.amount_cents, 0),
+    [activeIncomeEntries]
+  );
+
+  const themeSummaries = useMemo<ThemeSummary[]>(() => {
     return themes.map((theme) => {
       const total = activeEntries
         .filter((entry) => entry.theme_id === theme.id)
         .reduce((sum, entry) => sum + entry.amount_cents, 0);
-      const recommended = Math.round((salary * theme.default_percentage_bp) / 10000);
-      const spentPercentage = salary > 0 ? Math.round((total / salary) * 10000) : 0;
+      const recommended = Math.round(
+        (incomeTotalCents * theme.default_percentage_bp) / 10000
+      );
+      const spentPercentage =
+        incomeTotalCents > 0 ? Math.round((total / incomeTotalCents) * 10000) : 0;
 
       return {
         ...theme,
@@ -159,18 +195,17 @@ function FinancialDashboard() {
         total_cents: total,
       };
     });
-  }, [activeEntries, budgetMonth?.salary_cents, themes]);
+  }, [activeEntries, incomeTotalCents, themes]);
 
   const totals = useMemo(() => {
     const spent = activeEntries.reduce((sum, entry) => sum + entry.amount_cents, 0);
-    const salary = budgetMonth?.salary_cents ?? 0;
 
     return {
-      balance: salary - spent,
-      salary,
+      balance: incomeTotalCents - spent,
+      income: incomeTotalCents,
       spent,
     };
-  }, [activeEntries, budgetMonth?.salary_cents]);
+  }, [activeEntries, incomeTotalCents]);
 
   const openedThemeEntries = useMemo(() => {
     if (!selectedTheme) {
@@ -183,7 +218,26 @@ function FinancialDashboard() {
   const openedActiveEntries = openedThemeEntries.filter((entry) => !entry.deleted_at);
   const openedDeletedEntries = openedThemeEntries.filter((entry) => entry.deleted_at);
 
-  const handleSaveSalary = async () => {
+  const handleOpenTheme = (summary: ThemeSummary) => {
+    setSelectedTheme(summary);
+    setDrawerTab("active");
+    setEditingEntry(null);
+    setFormValues(emptyEntryForm(summary.id));
+  };
+
+  const handleEditIncomeEntry = (entry: MonthlyIncomeEntry) => {
+    setEditingIncomeEntry(entry);
+    setIncomeFormValues({
+      amount: centsToInputValue(entry.amount_cents),
+      description: entry.description,
+      entryDate: entry.received_date,
+      notes: entry.notes ?? "",
+    });
+  };
+
+  const handleSubmitIncomeEntry = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
     if (!budgetMonth) {
       return;
     }
@@ -191,22 +245,36 @@ function FinancialDashboard() {
     setIsSaving(true);
 
     try {
-      const salaryCents = currencyInputToCents(salaryInput);
-      await updateMonthSalary(budgetMonth.id, salaryCents);
-      setBudgetMonth({ ...budgetMonth, salary_cents: salaryCents });
-      toast.success("Salario salvo.");
+      const amountCents = currencyInputToCents(incomeFormValues.amount);
+
+      if (editingIncomeEntry) {
+        await updateIncomeEntry({
+          amountCents,
+          description: incomeFormValues.description,
+          entryId: editingIncomeEntry.id,
+          notes: incomeFormValues.notes,
+          receivedDate: incomeFormValues.entryDate,
+        });
+        toast.success("Receita atualizada.");
+      } else {
+        await createIncomeEntry({
+          amountCents,
+          budgetMonthId: budgetMonth.id,
+          description: incomeFormValues.description,
+          notes: incomeFormValues.notes,
+          receivedDate: incomeFormValues.entryDate,
+        });
+        toast.success("Receita adicionada.");
+      }
+
+      setEditingIncomeEntry(null);
+      setIncomeFormValues(emptyIncomeForm());
+      setIncomeEntries(await listMonthIncomeEntries(budgetMonth.id));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao salvar salario.");
+      toast.error(error instanceof Error ? error.message : "Erro ao salvar receita.");
     } finally {
       setIsSaving(false);
     }
-  };
-
-  const handleOpenTheme = (summary: ThemeSummary) => {
-    setSelectedTheme(summary);
-    setDrawerTab("active");
-    setEditingEntry(null);
-    setFormValues(emptyEntryForm(summary.id));
   };
 
   const handleEditEntry = (entry: MonthlyThemeEntry) => {
@@ -284,6 +352,26 @@ function FinancialDashboard() {
     }
   };
 
+  const handleSoftDeleteIncome = async () => {
+    if (!incomeDeleteTarget || !budgetMonth) {
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      await softDeleteIncomeEntry(incomeDeleteTarget.id, deleteReason);
+      setIncomeEntries(await listMonthIncomeEntries(budgetMonth.id));
+      setIncomeDeleteTarget(null);
+      setDeleteReason("");
+      toast.success("Receita cancelada.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao cancelar receita.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleRestore = async (entry: MonthlyThemeEntry) => {
     if (!budgetMonth) {
       return;
@@ -297,6 +385,24 @@ function FinancialDashboard() {
       toast.success("Lancamento restaurado.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro ao restaurar lancamento.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRestoreIncome = async (entry: MonthlyIncomeEntry) => {
+    if (!budgetMonth) {
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      await restoreIncomeEntry(entry.id);
+      setIncomeEntries(await listMonthIncomeEntries(budgetMonth.id));
+      toast.success("Receita restaurada.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao restaurar receita.");
     } finally {
       setIsSaving(false);
     }
@@ -361,20 +467,29 @@ function FinancialDashboard() {
         >
           <Card>
             <CardContent>
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                <TextField
-                  fullWidth
-                  label="Salario do mes"
-                  onChange={(event) => setSalaryInput(event.target.value)}
-                  value={salaryInput}
-                />
+              <Stack
+                alignItems={{ xs: "stretch", sm: "center" }}
+                direction={{ xs: "column", sm: "row" }}
+                spacing={2}
+              >
+                <Box sx={{ flexGrow: 1 }}>
+                  <Typography color="text.secondary" variant="body2">
+                    Receitas do mes
+                  </Typography>
+                  <Typography variant="h2">
+                    {centsToCurrency(totals.income)}
+                  </Typography>
+                  <Typography color="text.secondary" variant="caption">
+                    {activeIncomeEntries.length} entradas ativas
+                  </Typography>
+                </Box>
                 <Button
                   disabled={isSaving}
-                  onClick={handleSaveSalary}
-                  startIcon={<SaveOutlined />}
+                  onClick={() => setIncomeDrawerOpen(true)}
+                  startIcon={<AddOutlined />}
                   variant="contained"
                 >
-                  Salvar
+                  Gerenciar
                 </Button>
               </Stack>
             </CardContent>
@@ -498,6 +613,28 @@ function FinancialDashboard() {
         theme={selectedTheme}
       />
 
+      <IncomeDrawer
+        activeEntries={activeIncomeEntries}
+        deletedEntries={deletedIncomeEntries}
+        drawerTab={incomeDrawerTab}
+        editingEntry={editingIncomeEntry}
+        formValues={incomeFormValues}
+        isSaving={isSaving}
+        onCancelEdit={() => {
+          setEditingIncomeEntry(null);
+          setIncomeFormValues(emptyIncomeForm());
+        }}
+        onClose={() => setIncomeDrawerOpen(false)}
+        onDelete={(entry) => setIncomeDeleteTarget(entry)}
+        onEdit={handleEditIncomeEntry}
+        onFormChange={setIncomeFormValues}
+        onRestore={handleRestoreIncome}
+        onSubmit={handleSubmitIncomeEntry}
+        onTabChange={setIncomeDrawerTab}
+        open={incomeDrawerOpen}
+        totalCents={incomeTotalCents}
+      />
+
       <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} fullWidth>
         <DialogTitle>Cancelar lancamento</DialogTitle>
         <DialogContent>
@@ -520,6 +657,40 @@ function FinancialDashboard() {
             color="error"
             disabled={isSaving}
             onClick={handleSoftDelete}
+            startIcon={<DeleteOutlineOutlined />}
+            variant="contained"
+          >
+            Cancelar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(incomeDeleteTarget)}
+        onClose={() => setIncomeDeleteTarget(null)}
+        fullWidth
+      >
+        <DialogTitle>Cancelar receita</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Typography color="text.secondary">
+              O item continuara no historico e deixara de entrar no total do mes.
+            </Typography>
+            <TextField
+              autoFocus
+              fullWidth
+              label="Motivo"
+              onChange={(event) => setDeleteReason(event.target.value)}
+              value={deleteReason}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setIncomeDeleteTarget(null)}>Voltar</Button>
+          <Button
+            color="error"
+            disabled={isSaving}
+            onClick={handleSoftDeleteIncome}
             startIcon={<DeleteOutlineOutlined />}
             variant="contained"
           >
@@ -558,6 +729,214 @@ function MetricCard({ label, tone = "default", value }: MetricCardProps) {
         </Typography>
       </CardContent>
     </Card>
+  );
+}
+
+type IncomeDrawerProps = {
+  activeEntries: MonthlyIncomeEntry[];
+  deletedEntries: MonthlyIncomeEntry[];
+  drawerTab: "active" | "deleted";
+  editingEntry: MonthlyIncomeEntry | null;
+  formValues: EntryFormValues;
+  isSaving: boolean;
+  onCancelEdit: () => void;
+  onClose: () => void;
+  onDelete: (entry: MonthlyIncomeEntry) => void;
+  onEdit: (entry: MonthlyIncomeEntry) => void;
+  onFormChange: (values: EntryFormValues) => void;
+  onRestore: (entry: MonthlyIncomeEntry) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onTabChange: (value: "active" | "deleted") => void;
+  open: boolean;
+  totalCents: number;
+};
+
+function IncomeDrawer({
+  activeEntries,
+  deletedEntries,
+  drawerTab,
+  editingEntry,
+  formValues,
+  isSaving,
+  onCancelEdit,
+  onClose,
+  onDelete,
+  onEdit,
+  onFormChange,
+  onRestore,
+  onSubmit,
+  onTabChange,
+  open,
+  totalCents,
+}: IncomeDrawerProps) {
+  const visibleEntries = drawerTab === "active" ? activeEntries : deletedEntries;
+
+  return (
+    <Drawer
+      anchor="right"
+      onClose={onClose}
+      open={open}
+      PaperProps={{
+        sx: {
+          maxWidth: "100%",
+          width: 680,
+        },
+      }}
+    >
+      <Box sx={{ p: 3 }}>
+        <Stack spacing={3}>
+          <Box>
+            <Typography variant="h2">Receitas do mes</Typography>
+            <Typography color="text.secondary">
+              Total ativo: {centsToCurrency(totalCents)}
+            </Typography>
+          </Box>
+
+          <Card variant="outlined">
+            <CardContent>
+              <Box component="form" onSubmit={onSubmit}>
+                <Stack spacing={2}>
+                  <Typography variant="h3">
+                    {editingEntry ? "Editar receita" : "Nova receita"}
+                  </Typography>
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                    <TextField
+                      fullWidth
+                      label="Descricao"
+                      onChange={(event) =>
+                        onFormChange({ ...formValues, description: event.target.value })
+                      }
+                      placeholder="Salario, bonificacao, extra..."
+                      required
+                      value={formValues.description}
+                    />
+                    <TextField
+                      label="Valor"
+                      onChange={(event) =>
+                        onFormChange({ ...formValues, amount: event.target.value })
+                      }
+                      required
+                      value={formValues.amount}
+                    />
+                  </Stack>
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                    <TextField
+                      fullWidth
+                      label="Data"
+                      onChange={(event) =>
+                        onFormChange({ ...formValues, entryDate: event.target.value })
+                      }
+                      required
+                      type="date"
+                      value={formValues.entryDate}
+                    />
+                    <TextField
+                      fullWidth
+                      label="Observacoes"
+                      onChange={(event) =>
+                        onFormChange({ ...formValues, notes: event.target.value })
+                      }
+                      value={formValues.notes}
+                    />
+                  </Stack>
+                  <Stack direction="row" justifyContent="flex-end" spacing={1}>
+                    {editingEntry && <Button onClick={onCancelEdit}>Limpar</Button>}
+                    <Button
+                      disabled={isSaving}
+                      startIcon={editingEntry ? <SaveOutlined /> : <AddOutlined />}
+                      type="submit"
+                      variant="contained"
+                    >
+                      {editingEntry ? "Salvar" : "Adicionar"}
+                    </Button>
+                  </Stack>
+                </Stack>
+              </Box>
+            </CardContent>
+          </Card>
+
+          <Box>
+            <Tabs
+              onChange={(_event, value: "active" | "deleted") => onTabChange(value)}
+              value={drawerTab}
+            >
+              <Tab label={`Ativas (${activeEntries.length})`} value="active" />
+              <Tab
+                icon={<HistoryOutlined />}
+                iconPosition="start"
+                label={`Canceladas (${deletedEntries.length})`}
+                value="deleted"
+              />
+            </Tabs>
+            <Divider />
+          </Box>
+
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Descricao</TableCell>
+                <TableCell>Data</TableCell>
+                <TableCell align="right">Valor</TableCell>
+                <TableCell align="right">Acoes</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {visibleEntries.map((entry) => (
+                <TableRow key={entry.id}>
+                  <TableCell>
+                    <Typography variant="body2">{entry.description}</Typography>
+                    {(entry.notes || entry.deleted_reason) && (
+                      <Typography color="text.secondary" variant="caption">
+                        {entry.notes || entry.deleted_reason}
+                      </Typography>
+                    )}
+                  </TableCell>
+                  <TableCell>{dayjs(entry.received_date).format("DD/MM/YYYY")}</TableCell>
+                  <TableCell align="right">
+                    {centsToCurrency(entry.amount_cents)}
+                  </TableCell>
+                  <TableCell align="right">
+                    {drawerTab === "active" ? (
+                      <Stack direction="row" justifyContent="flex-end" spacing={0.5}>
+                        <Tooltip title="Editar">
+                          <IconButton onClick={() => onEdit(entry)} size="small">
+                            <EditOutlined fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Cancelar">
+                          <IconButton
+                            color="error"
+                            onClick={() => onDelete(entry)}
+                            size="small"
+                          >
+                            <DeleteOutlineOutlined fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Stack>
+                    ) : (
+                      <Tooltip title="Restaurar">
+                        <IconButton onClick={() => onRestore(entry)} size="small">
+                          <ReplayOutlined fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {visibleEntries.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4}>
+                    <Typography color="text.secondary" sx={{ py: 3 }} textAlign="center">
+                      Nenhuma receita encontrada.
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </Stack>
+      </Box>
+    </Drawer>
   );
 }
 

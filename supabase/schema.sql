@@ -24,6 +24,26 @@ create unique index if not exists idx_budget_months_user_year_month_active
   on public.budget_months(user_id, year, month)
   where deleted_at is null;
 
+create table if not exists public.monthly_income_entries (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  budget_month_id uuid not null references public.budget_months(id) on delete cascade,
+  description text not null,
+  amount_cents integer not null check (amount_cents >= 0),
+  received_date date not null,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz,
+  deleted_at timestamptz,
+  deleted_reason text
+);
+
+create index if not exists idx_monthly_income_entries_month
+  on public.monthly_income_entries(budget_month_id);
+
+create index if not exists idx_monthly_income_entries_user_active
+  on public.monthly_income_entries(user_id, deleted_at);
+
 create table if not exists public.budget_themes (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -86,12 +106,14 @@ create table if not exists public.audit_logs (
 
 alter table public.profiles enable row level security;
 alter table public.budget_months enable row level security;
+alter table public.monthly_income_entries enable row level security;
 alter table public.budget_themes enable row level security;
 alter table public.monthly_theme_entries enable row level security;
 alter table public.goals enable row level security;
 alter table public.audit_logs enable row level security;
 
 alter table public.budget_months alter column user_id set default auth.uid();
+alter table public.monthly_income_entries alter column user_id set default auth.uid();
 alter table public.monthly_theme_entries alter column user_id set default auth.uid();
 alter table public.goals alter column user_id set default auth.uid();
 
@@ -111,6 +133,21 @@ create policy "budget_months_manage_own"
   on public.budget_months for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+drop policy if exists "monthly_income_entries_manage_own" on public.monthly_income_entries;
+create policy "monthly_income_entries_manage_own"
+  on public.monthly_income_entries for all
+  using (auth.uid() = user_id)
+  with check (
+    auth.uid() = user_id
+    and exists (
+      select 1
+      from public.budget_months bm
+      where bm.id = budget_month_id
+        and bm.user_id = auth.uid()
+        and bm.deleted_at is null
+    )
+  );
 
 drop policy if exists "budget_themes_read_active" on public.budget_themes;
 create policy "budget_themes_read_active"
@@ -217,6 +254,11 @@ $$;
 drop trigger if exists audit_budget_months on public.budget_months;
 create trigger audit_budget_months
   after insert or update or delete on public.budget_months
+  for each row execute function public.audit_row_changes();
+
+drop trigger if exists audit_monthly_income_entries on public.monthly_income_entries;
+create trigger audit_monthly_income_entries
+  after insert or update or delete on public.monthly_income_entries
   for each row execute function public.audit_row_changes();
 
 drop trigger if exists audit_monthly_theme_entries on public.monthly_theme_entries;
