@@ -123,6 +123,7 @@ export const ptBR = {
   [tokens.dashboard.historyTitle]: "Histórico",
   [tokens.dashboard.historyEmpty]: "Nenhuma alteração registrada ainda.",
   [tokens.dashboard.historyChangedFields]: "Alterações",
+  [tokens.dashboard.historyCurrentValue]: "Valor atual registrado",
   [tokens.dashboard.auditInsert]: "Criado",
   [tokens.dashboard.auditUpdate]: "Atualizado",
   [tokens.dashboard.auditSoftDelete]: "Cancelado",

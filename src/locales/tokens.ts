@@ -118,6 +118,7 @@ export const tokens = {
     historyTitle: "dashboard.historyTitle",
     historyEmpty: "dashboard.historyEmpty",
     historyChangedFields: "dashboard.historyChangedFields",
+    historyCurrentValue: "dashboard.historyCurrentValue",
     auditInsert: "dashboard.auditInsert",
     auditUpdate: "dashboard.auditUpdate",
     auditSoftDelete: "dashboard.auditSoftDelete",

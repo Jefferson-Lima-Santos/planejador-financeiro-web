@@ -122,6 +122,7 @@ export const en = {
   [tokens.dashboard.historyTitle]: "History",
   [tokens.dashboard.historyEmpty]: "No changes recorded yet.",
   [tokens.dashboard.historyChangedFields]: "Changes",
+  [tokens.dashboard.historyCurrentValue]: "Current recorded value",
   [tokens.dashboard.auditInsert]: "Created",
   [tokens.dashboard.auditUpdate]: "Updated",
   [tokens.dashboard.auditSoftDelete]: "Canceled",

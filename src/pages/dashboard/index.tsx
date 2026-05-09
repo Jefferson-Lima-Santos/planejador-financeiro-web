@@ -2167,6 +2167,49 @@ function AuditTimeline({ isLoading, logs }: AuditTimelineProps) {
       .sort((a, b) => a.localeCompare(b));
   };
 
+  const getFieldLabel = (field: string) => {
+    const labels: Record<string, string> = {
+      amount_cents: t(tokens.common.value),
+      deleted_at: t(tokens.common.canceled),
+      deleted_reason: t(tokens.dashboard.changeReason),
+      description: t(tokens.common.description),
+      entry_date: t(tokens.common.date),
+      notes: t(tokens.common.notes),
+      received_date: t(tokens.common.date),
+      recurring_entry_id: t(tokens.dashboard.recurring),
+      theme_id: "Tema",
+    };
+
+    return labels[field] ?? field.replaceAll("_", " ");
+  };
+
+  const formatAuditValue = (field: string, value: unknown) => {
+    if (value === null || value === undefined || value === "") {
+      return "-";
+    }
+
+    if (field === "amount_cents" && typeof value === "number") {
+      return centsToCurrency(value);
+    }
+
+    if (
+      (field === "entry_date" || field === "received_date") &&
+      typeof value === "string"
+    ) {
+      return dayjs(value).format("DD/MM/YYYY");
+    }
+
+    if (field === "deleted_at" && typeof value === "string") {
+      return dayjs(value).format("DD/MM/YYYY HH:mm");
+    }
+
+    if (typeof value === "boolean") {
+      return value ? "Sim" : "Não";
+    }
+
+    return String(value);
+  };
+
   return (
     <Stack spacing={1.25}>
       {logs.map((log) => {
@@ -2204,8 +2247,27 @@ function AuditTimeline({ isLoading, logs }: AuditTimelineProps) {
               </Stack>
 
               {changedFields.length > 0 && (
+                <Stack spacing={0.5}>
+                  <Typography color="text.secondary" variant="caption">
+                    {t(tokens.dashboard.historyChangedFields)}
+                  </Typography>
+                  {changedFields.map((field) => {
+                    const before = (log.old_values as Record<string, unknown>)[field];
+                    const after = (log.new_values as Record<string, unknown>)[field];
+
+                    return (
+                      <Typography key={field} color="text.secondary" variant="caption">
+                        {getFieldLabel(field)}: {formatAuditValue(field, before)} -&gt;{" "}
+                        {formatAuditValue(field, after)}
+                      </Typography>
+                    );
+                  })}
+                </Stack>
+              )}
+
+              {changedFields.length === 0 && log.new_values && (
                 <Typography color="text.secondary" variant="caption">
-                  {t(tokens.dashboard.historyChangedFields)}: {changedFields.join(", ")}
+                  {t(tokens.dashboard.historyCurrentValue)}
                 </Typography>
               )}
             </Stack>
