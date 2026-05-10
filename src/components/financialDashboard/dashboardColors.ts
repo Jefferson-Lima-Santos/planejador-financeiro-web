@@ -27,6 +27,17 @@ export const expenseHealthColors = {
   },
 };
 
+export const themeChartColors = [
+  "#2563eb",
+  "#14b8a6",
+  "#f59e0b",
+  "#ef4444",
+  "#8b5cf6",
+  "#0f766e",
+  "#db2777",
+  "#64748b",
+];
+
 export type ExpenseHealth = "ok" | "over" | "critical";
 
 export const getExpenseHealth = (summary: ThemeSummary): ExpenseHealth => {

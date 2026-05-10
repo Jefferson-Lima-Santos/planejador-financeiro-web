@@ -15,7 +15,7 @@ import {
 import { tokens } from "@/locales/tokens";
 import type { ThemeSummary } from "@/types/finance";
 import { centsToCurrency } from "@/utils/money";
-import { expenseHealthColors, getExpenseHealth } from "./dashboardColors";
+import { expenseHealthColors, getExpenseHealth, themeChartColors } from "./dashboardColors";
 
 type ExpenseChartsSectionProps = {
   isLoading: boolean;
@@ -30,8 +30,8 @@ export const ExpenseChartsSection = ({
   const totalSpent = themeSummaries.reduce((sum, summary) => sum + summary.total_cents, 0);
   const spentData = themeSummaries
     .filter((summary) => summary.total_cents > 0)
-    .map((summary) => ({
-      color: expenseHealthColors[getExpenseHealth(summary)].main,
+    .map((summary, index) => ({
+      color: themeChartColors[index % themeChartColors.length],
       name: summary.name,
       percentage: totalSpent > 0 ? Math.round((summary.total_cents / totalSpent) * 100) : 0,
       value: summary.total_cents,
