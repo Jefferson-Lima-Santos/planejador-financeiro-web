@@ -36,16 +36,21 @@ export const ExpenseChartsSection = ({
       percentage: totalSpent > 0 ? Math.round((summary.total_cents / totalSpent) * 100) : 0,
       value: summary.total_cents,
     }));
-  const usageData = themeSummaries.map((summary) => ({
-    color: expenseHealthColors[getExpenseHealth(summary)].main,
-    name: summary.name,
-    usage:
+  const usageData = themeSummaries.map((summary) => {
+    const usage =
       summary.recommended_cents > 0
         ? Math.round((summary.total_cents / summary.recommended_cents) * 100)
         : summary.total_cents > 0
         ? 130
-        : 0,
-  }));
+        : 0;
+
+    return {
+      color: expenseHealthColors[getExpenseHealth(summary)].main,
+      displayUsage: usage === 0 ? 3 : usage,
+      name: summary.name,
+      usage,
+    };
+  });
 
   if (isLoading) {
     return (
@@ -177,8 +182,15 @@ export const ExpenseChartsSection = ({
                     tickFormatter={(value) => `${value}%`}
                     tickLine={false}
                   />
-                  <RechartsTooltip formatter={(value) => `${value}%`} />
-                  <Bar dataKey="usage" radius={[6, 6, 0, 0]}>
+                  <RechartsTooltip
+                    cursor={false}
+                    formatter={(_value, _name, item) => {
+                      const payload = item.payload as { usage?: number };
+
+                      return [`${payload.usage ?? 0}%`, t(tokens.dashboard.expenseLimitTitle)];
+                    }}
+                  />
+                  <Bar dataKey="displayUsage" radius={[6, 6, 0, 0]}>
                     {usageData.map((entry) => (
                       <Cell fill={entry.color} key={entry.name} />
                     ))}
