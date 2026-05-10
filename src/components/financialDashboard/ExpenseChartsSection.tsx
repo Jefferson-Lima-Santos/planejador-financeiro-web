@@ -22,7 +22,10 @@ type ExpenseChartsSectionProps = {
   themeSummaries: ThemeSummary[];
 };
 
-export function ExpenseChartsSection({ isLoading, themeSummaries }: ExpenseChartsSectionProps) {
+export const ExpenseChartsSection = ({
+  isLoading,
+  themeSummaries,
+}: ExpenseChartsSectionProps) => {
   const { t } = useTranslation();
   const totalSpent = themeSummaries.reduce((sum, summary) => sum + summary.total_cents, 0);
   const spentData = themeSummaries
@@ -188,4 +191,4 @@ export function ExpenseChartsSection({ isLoading, themeSummaries }: ExpenseChart
       </Card>
     </Box>
   );
-}
+};

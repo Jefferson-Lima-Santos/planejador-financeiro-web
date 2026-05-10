@@ -11,7 +11,7 @@ type ThemeSummaryCardProps = {
   summary: ThemeSummary;
 };
 
-export function ThemeSummaryCard({ onOpen, summary }: ThemeSummaryCardProps) {
+export const ThemeSummaryCard = ({ onOpen, summary }: ThemeSummaryCardProps) => {
   const { t } = useTranslation();
   const progress =
     summary.recommended_cents > 0
@@ -102,4 +102,4 @@ export function ThemeSummaryCard({ onOpen, summary }: ThemeSummaryCardProps) {
       </CardContent>
     </Card>
   );
-}
+};

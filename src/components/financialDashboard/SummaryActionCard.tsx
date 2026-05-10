@@ -11,7 +11,7 @@ type SummaryActionCardProps = {
   valueColor: string;
 };
 
-export function SummaryActionCard({
+export const SummaryActionCard = ({
   actionLabel,
   detail,
   isLoading,
@@ -19,7 +19,7 @@ export function SummaryActionCard({
   onAction,
   value,
   valueColor,
-}: SummaryActionCardProps) {
+}: SummaryActionCardProps) => {
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (isLoading) {
       return;
@@ -84,4 +84,4 @@ export function SummaryActionCard({
       </CardContent>
     </Card>
   );
-}
+};

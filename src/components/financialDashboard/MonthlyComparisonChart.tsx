@@ -10,7 +10,10 @@ type MonthlyComparisonChartProps = {
   isLoading?: boolean;
 };
 
-export function MonthlyComparisonChart({ data, isLoading = false }: MonthlyComparisonChartProps) {
+export const MonthlyComparisonChart = ({
+  data,
+  isLoading = false,
+}: MonthlyComparisonChartProps) => {
   const { t } = useTranslation();
   const maxValue = Math.max(
     1,
@@ -129,7 +132,7 @@ export function MonthlyComparisonChart({ data, isLoading = false }: MonthlyCompa
       </CardContent>
     </Card>
   );
-}
+};
 
 type ChartBarProps = {
   color: string;
@@ -138,7 +141,7 @@ type ChartBarProps = {
   value: number;
 };
 
-function ChartBar({ color, label, maxValue, value }: ChartBarProps) {
+const ChartBar = ({ color, label, maxValue, value }: ChartBarProps) => {
   const width = `${Math.max(3, Math.round((value / maxValue) * 100))}%`;
 
   return (
@@ -172,14 +175,14 @@ function ChartBar({ color, label, maxValue, value }: ChartBarProps) {
       </Box>
     </Box>
   );
-}
+};
 
 type LegendDotProps = {
   color: string;
   label: string;
 };
 
-function LegendDot({ color, label }: LegendDotProps) {
+const LegendDot = ({ color, label }: LegendDotProps) => {
   return (
     <Stack alignItems="center" direction="row" spacing={0.75}>
       <Box sx={{ bgcolor: color, borderRadius: "50%", height: 10, width: 10 }} />
@@ -188,4 +191,4 @@ function LegendDot({ color, label }: LegendDotProps) {
       </Typography>
     </Stack>
   );
-}
+};

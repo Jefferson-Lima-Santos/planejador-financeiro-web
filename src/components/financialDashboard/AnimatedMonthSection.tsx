@@ -7,14 +7,14 @@ type AnimatedMonthSectionProps = {
   sectionKey: string;
 };
 
-export function AnimatedMonthSection({
+export const AnimatedMonthSection = ({
   animationSx,
   children,
   sectionKey,
-}: AnimatedMonthSectionProps) {
+}: AnimatedMonthSectionProps) => {
   return (
     <Box key={sectionKey} sx={animationSx}>
       {children}
     </Box>
   );
-}
+};

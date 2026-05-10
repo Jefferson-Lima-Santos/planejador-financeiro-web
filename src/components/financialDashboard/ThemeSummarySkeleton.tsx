@@ -1,6 +1,6 @@
 import { Box, Card, CardContent, Skeleton, Stack } from "@mui/material";
 
-export function ThemeSummarySkeleton() {
+export const ThemeSummarySkeleton = () => {
   return (
     <Card>
       <CardContent>
@@ -25,4 +25,4 @@ export function ThemeSummarySkeleton() {
       </CardContent>
     </Card>
   );
-}
+};

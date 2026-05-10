@@ -20,7 +20,7 @@ type GoalsSectionProps = {
   isLoading: boolean;
 };
 
-export function GoalsSection({ goals, isLoading }: GoalsSectionProps) {
+export const GoalsSection = ({ goals, isLoading }: GoalsSectionProps) => {
   const { t } = useTranslation();
 
   return (
@@ -103,4 +103,4 @@ export function GoalsSection({ goals, isLoading }: GoalsSectionProps) {
       </CardContent>
     </Card>
   );
-}
+};

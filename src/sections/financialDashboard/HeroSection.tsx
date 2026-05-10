@@ -17,13 +17,13 @@ type HeroSectionProps = {
   onChangeMonth: (month: Dayjs) => void;
 };
 
-export function HeroSection({
+export const HeroSection = ({
   currentMonth,
   isCurrentMonth,
   isLoading,
   isMonthTransitioning,
   onChangeMonth,
-}: HeroSectionProps) {
+}: HeroSectionProps) => {
   const { t } = useTranslation();
   const controlsDisabled = isLoading || isMonthTransitioning;
 
@@ -124,4 +124,4 @@ export function HeroSection({
       </CardContent>
     </Card>
   );
-}
+};

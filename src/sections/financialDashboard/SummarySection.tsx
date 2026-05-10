@@ -24,7 +24,7 @@ type SummarySectionProps = {
   totals: DashboardTotals;
 };
 
-export function SummarySection({
+export const SummarySection = ({
   activeIncomeCount,
   animationSx,
   currentMonth,
@@ -32,7 +32,7 @@ export function SummarySection({
   onOpenIncome,
   onScrollToExpenses,
   totals,
-}: SummarySectionProps) {
+}: SummarySectionProps) => {
   const { t } = useTranslation();
 
   return (
@@ -77,4 +77,4 @@ export function SummarySection({
       </Box>
     </AnimatedMonthSection>
   );
-}
+};

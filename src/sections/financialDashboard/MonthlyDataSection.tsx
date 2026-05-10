@@ -24,14 +24,14 @@ type MonthlyDataSectionProps = {
   totals: DashboardTotals;
 };
 
-export function MonthlyDataSection({
+export const MonthlyDataSection = ({
   animationSx,
   comparisons,
   currentMonth,
   goals,
   isLoading,
   totals,
-}: MonthlyDataSectionProps) {
+}: MonthlyDataSectionProps) => {
   const { t } = useTranslation();
 
   return (
@@ -51,4 +51,4 @@ export function MonthlyDataSection({
       </Stack>
     </AnimatedMonthSection>
   );
-}
+};

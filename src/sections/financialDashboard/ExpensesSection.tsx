@@ -19,10 +19,8 @@ type ExpensesSectionProps = {
   themeSummaries: ThemeSummary[];
 };
 
-export const ExpensesSection = forwardRef<HTMLDivElement, ExpensesSectionProps>(function ExpensesSection(
-  { animationSx, currentMonth, isLoading, onAddExpense, onOpenTheme, themeSummaries },
-  ref
-) {
+export const ExpensesSection = forwardRef<HTMLDivElement, ExpensesSectionProps>(
+  ({ animationSx, currentMonth, isLoading, onAddExpense, onOpenTheme, themeSummaries }, ref) => {
   const { t } = useTranslation();
 
   return (
@@ -72,4 +70,7 @@ export const ExpensesSection = forwardRef<HTMLDivElement, ExpensesSectionProps>(
       </Stack>
     </AnimatedMonthSection>
   );
-});
+  }
+);
+
+ExpensesSection.displayName = "ExpensesSection";
