@@ -80,6 +80,10 @@ export const en = {
   [tokens.dashboard.expensesByThemeSubtitle]:
     "Click a theme or use Add expense to record expenses.",
   [tokens.dashboard.financialOverview]: "Financial overview",
+  [tokens.dashboard.goalsEmpty]: "No goals registered for this month.",
+  [tokens.dashboard.goalsSubtitle]: "Track financial goals tied to the selected month.",
+  [tokens.dashboard.goalsTitle]: "Goals",
+  [tokens.dashboard.currentMonthBadge]: "You are in the current month",
   [tokens.dashboard.income]: "Income",
   [tokens.dashboard.incomeActiveCount]: "{{count}} active entries",
   [tokens.dashboard.incomeActiveTab]: "Active ({{count}})",
@@ -101,6 +105,7 @@ export const en = {
     "No themes found. Check whether the database script created the initial themes.",
   [tokens.dashboard.planned]: "Planned",
   [tokens.dashboard.previousMonth]: "Previous month",
+  [tokens.dashboard.backToCurrentMonth]: "Back to current month",
   [tokens.dashboard.recurring]: "Recurring",
   [tokens.dashboard.repeatUntil]: "Repeat until",
   [tokens.dashboard.repeatUntilHelp]: "Leave blank to repeat without an end date.",
@@ -116,6 +121,7 @@ export const en = {
   [tokens.dashboard.statusOver]: "Heads up: you spent more than you earned this month.",
   [tokens.dashboard.themeRecommended]: "Recommended",
   [tokens.dashboard.themeSpent]: "Spent",
+  [tokens.dashboard.today]: "Today",
   [tokens.dashboard.totalActive]: "Active total",
   [tokens.dashboard.unexpected]: "Unexpected",
 

@@ -1,4 +1,13 @@
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  FormEvent,
+  forwardRef,
+  ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Head from "next/head";
 import dayjs, { Dayjs } from "dayjs";
 import "dayjs/locale/pt-br";
@@ -6,15 +15,18 @@ import {
   AddOutlined,
   ArrowBackIosNewOutlined,
   ArrowForwardIosOutlined,
+  CalendarMonthOutlined,
   CloseOutlined,
   DeleteOutlineOutlined,
   EditOutlined,
+  FlagOutlined,
   HistoryOutlined,
   ReplayOutlined,
   SaveOutlined,
 } from "@mui/icons-material";
 import {
   Alert,
+  Avatar,
   Box,
   Button,
   Card,
@@ -31,6 +43,7 @@ import {
   FormControlLabel,
   IconButton,
   LinearProgress,
+  Skeleton,
   Stack,
   Tab,
   Table,
@@ -57,6 +70,7 @@ import {
   createIncomeEntry,
   ensureBudgetMonth,
   getRecurringEntry,
+  listMonthGoals,
   listAuditLogsForRecord,
   listBudgetThemes,
   listMonthlyComparisons,
@@ -75,6 +89,7 @@ import type {
   BudgetMonth,
   BudgetTheme,
   EntryFormValues,
+  Goal,
   MonthlyComparison,
   MonthlyIncomeEntry,
   MonthlyThemeEntry,
@@ -125,6 +140,16 @@ const sortAuditLogs = (logs: AuditLog[]) =>
       new Date(second.created_at).getTime() - new Date(first.created_at).getTime()
   );
 
+type MonthTransitionDirection = "next" | "previous";
+type MonthTransitionPhase = "idle" | "exit" | "enter";
+type DashboardTotals = {
+  balance: number;
+  income: number;
+  planned: number;
+  spent: number;
+  unexpected: number;
+};
+
 export default function DashboardPage() {
   return (
     <AuthGuard>
@@ -143,12 +168,14 @@ function FinancialDashboard() {
   const tokenRefreshTick = useRecoilValue(authTokenRefreshTickAtom);
   const expensesSectionRef = useRef<HTMLDivElement | null>(null);
   const lastLoadedRef = useRef<{ key: string; tokenTick: number } | null>(null);
+  const monthTransitionTimeoutsRef = useRef<number[]>([]);
   const [currentMonth, setCurrentMonth] = useState<Dayjs>(dayjs().startOf("month"));
   const [budgetMonth, setBudgetMonth] = useState<BudgetMonth | null>(null);
   const [comparisons, setComparisons] = useState<MonthlyComparison[]>([]);
   const [themes, setThemes] = useState<BudgetTheme[]>([]);
   const [entries, setEntries] = useState<MonthlyThemeEntry[]>([]);
   const [incomeEntries, setIncomeEntries] = useState<MonthlyIncomeEntry[]>([]);
+  const [goals, setGoals] = useState<Goal[]>([]);
   const [incomeDrawerOpen, setIncomeDrawerOpen] = useState(false);
   const [incomeDrawerTab, setIncomeDrawerTab] = useState<"active" | "deleted">("active");
   const [incomeFormValues, setIncomeFormValues] = useState(emptyIncomeForm());
@@ -171,6 +198,10 @@ function FinancialDashboard() {
   const [deleteReason, setDeleteReason] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [monthTransitionDirection, setMonthTransitionDirection] =
+    useState<MonthTransitionDirection>("next");
+  const [monthTransitionPhase, setMonthTransitionPhase] =
+    useState<MonthTransitionPhase>("idle");
 
   const loadMonth = useCallback(async () => {
     if (!userId) {
@@ -190,10 +221,11 @@ function FinancialDashboard() {
         currentMonth.year(),
         currentMonth.month() + 1
       );
-      const [themeRows, entryRows, incomeRows, comparisonRows] = await Promise.all([
+      const [themeRows, entryRows, incomeRows, goalRows, comparisonRows] = await Promise.all([
         listBudgetThemes(),
         listMonthEntries(month.id),
         listMonthIncomeEntries(month.id),
+        listMonthGoals(month.id),
         listMonthlyComparisons(currentMonth.year(), currentMonth.month() + 1),
       ]);
 
@@ -202,6 +234,7 @@ function FinancialDashboard() {
       setThemes(themeRows);
       setEntries(entryRows);
       setIncomeEntries(incomeRows);
+      setGoals(goalRows);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Erro ao carregar dados."
@@ -225,7 +258,15 @@ function FinancialDashboard() {
 
     lastLoadedRef.current = { key: monthKey, tokenTick: tokenRefreshTick };
     loadMonth();
-  }, [loadMonth, tokenRefreshTick]);
+  }, [currentMonth, loadMonth, tokenRefreshTick, userId]);
+
+  useEffect(() => {
+    return () => {
+      monthTransitionTimeoutsRef.current.forEach((timeoutId) =>
+        window.clearTimeout(timeoutId)
+      );
+    };
+  }, []);
 
   const activeEntries = useMemo(
     () => entries.filter((entry) => !entry.deleted_at),
@@ -295,6 +336,81 @@ function FinancialDashboard() {
 
   const openedActiveEntries = openedThemeEntries.filter((entry) => !entry.deleted_at);
   const openedDeletedEntries = openedThemeEntries.filter((entry) => entry.deleted_at);
+  const isCurrentMonth = currentMonth.isSame(dayjs().startOf("month"), "month");
+  const isMonthTransitioning = monthTransitionPhase !== "idle";
+  const monthContentAnimation = useMemo(
+    () => ({
+      "@keyframes month-content-enter": {
+        "0%": {
+          opacity: 0,
+          transform:
+            monthTransitionDirection === "next"
+              ? "translateX(72px)"
+              : "translateX(-72px)",
+        },
+        "100%": {
+          opacity: 1,
+          transform: "translateX(0)",
+        },
+      },
+      "@keyframes month-content-exit": {
+        "0%": {
+          opacity: 1,
+          transform: "translateX(0)",
+        },
+        "100%": {
+          opacity: 0,
+          transform:
+            monthTransitionDirection === "next"
+              ? "translateX(-72px)"
+              : "translateX(72px)",
+        },
+      },
+      animation:
+        monthTransitionPhase === "exit"
+          ? "month-content-exit 320ms cubic-bezier(0.4, 0, 0.2, 1) forwards"
+          : monthTransitionPhase === "enter"
+          ? "month-content-enter 460ms cubic-bezier(0.16, 1, 0.3, 1)"
+          : "none",
+      willChange: monthTransitionPhase === "idle" ? "auto" : "opacity, transform",
+    }),
+    [monthTransitionDirection, monthTransitionPhase]
+  );
+
+  const changeMonth = (nextMonth: Dayjs) => {
+    if (isLoading || isMonthTransitioning) {
+      return;
+    }
+
+    const currentOrder = currentMonth.year() * 12 + currentMonth.month();
+    const nextOrder = nextMonth.year() * 12 + nextMonth.month();
+
+    if (nextOrder === currentOrder) {
+      return;
+    }
+
+    setMonthTransitionDirection(nextOrder > currentOrder ? "next" : "previous");
+    setMonthTransitionPhase("exit");
+
+    monthTransitionTimeoutsRef.current.forEach((timeoutId) =>
+      window.clearTimeout(timeoutId)
+    );
+
+    const switchMonthTimeout = window.setTimeout(() => {
+      setCurrentMonth(nextMonth.startOf("month"));
+      setMonthTransitionPhase("enter");
+    }, 320);
+
+    const finishTransitionTimeout = window.setTimeout(() => {
+      setMonthTransitionPhase("idle");
+      monthTransitionTimeoutsRef.current = [];
+    }, 860);
+
+    monthTransitionTimeoutsRef.current = [
+      switchMonthTimeout,
+      finishTransitionTimeout,
+    ];
+  };
 
   const handleOpenTheme = (summary: ThemeSummary) => {
     setSelectedTheme(summary);
@@ -593,14 +709,6 @@ function FinancialDashboard() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <Box sx={{ display: "flex", justifyContent: "center", py: 12 }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
-
   return (
     <>
       <Head>
@@ -610,331 +718,47 @@ function FinancialDashboard() {
       </Head>
 
       <Stack spacing={3}>
-        <Card
-          sx={{
-            background:
-              "linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(37, 99, 235, 0.72))",
-            color: "common.white",
-            overflow: "hidden",
-            position: "relative",
-          }}
-        >
-          <CardContent sx={{ p: { xs: 3, md: 4 } }}>
-            <Stack
-              alignItems={{ xs: "stretch", md: "center" }}
-              direction={{ xs: "column", md: "row" }}
-              spacing={3}
-            >
-              <Box sx={{ flexGrow: 1 }}>
-                <Typography sx={{ opacity: 0.72 }} variant="body2">
-                  {t(tokens.dashboard.financialOverview)}
-                </Typography>
-                <Typography sx={{ mt: 0.5 }} variant="h1">
-                  {t(tokens.dashboard.monthBudget)}
-                </Typography>
-                <Typography sx={{ color: "rgba(255,255,255,0.76)", mt: 1 }}>
-                  {currentMonth.format("MMMM [de] YYYY")}
-                </Typography>
-              </Box>
+        <HeroSection
+          currentMonth={currentMonth}
+          isCurrentMonth={isCurrentMonth}
+          isLoading={isLoading}
+          isMonthTransitioning={isMonthTransitioning}
+          onChangeMonth={changeMonth}
+        />
 
-              <Stack
-                alignItems="center"
-                direction="row"
-                spacing={1}
-                sx={{
-                  bgcolor: "rgba(255,255,255,0.12)",
-                  border: "1px solid rgba(255,255,255,0.18)",
-                  borderRadius: 2,
-                  p: 1,
-                }}
-              >
-                <Tooltip title={t(tokens.dashboard.previousMonth)}>
-                  <IconButton
-                    onClick={() =>
-                      setCurrentMonth((value) => value.subtract(1, "month"))
-                    }
-                    sx={{ color: "common.white" }}
-                  >
-                    <ArrowBackIosNewOutlined />
-                  </IconButton>
-                </Tooltip>
-                <Button
-                  onClick={() => setCurrentMonth(dayjs().startOf("month"))}
-                  sx={{
-                    bgcolor: "rgba(255,255,255,0.14)",
-                    color: "common.white",
-                    "&:hover": { bgcolor: "rgba(255,255,255,0.22)" },
-                  }}
-                  variant="text"
-                >
-                  {t(tokens.dashboard.currentMonth)}
-                </Button>
-                <Tooltip title={t(tokens.dashboard.nextMonth)}>
-                  <IconButton
-                    onClick={() => setCurrentMonth((value) => value.add(1, "month"))}
-                    sx={{ color: "common.white" }}
-                  >
-                    <ArrowForwardIosOutlined />
-                  </IconButton>
-                </Tooltip>
-              </Stack>
-            </Stack>
-          </CardContent>
-        </Card>
-
-        <Box
-          sx={{
-            display: "grid",
-            gap: 2,
-            gridTemplateColumns: {
-              xs: "1fr",
-              sm: "repeat(2, minmax(0, 1fr))",
-              lg: "1.1fr repeat(4, minmax(0, 1fr))",
-            },
-          }}
-        >
-          <Card
-            onClick={() => setIncomeDrawerOpen(true)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                setIncomeDrawerOpen(true);
-              }
-            }}
-            role="button"
-            tabIndex={0}
-            sx={{
-              cursor: "pointer",
-              position: "relative",
-              transition: "transform 160ms ease, box-shadow 160ms ease",
-              "&:hover": {
-                boxShadow: 6,
-                transform: "translateY(-2px)",
-              },
-            }}
-          >
-            <CardContent>
-              <Box sx={{ pr: 8 }}>
-                <Typography color="text.secondary" variant="body2">
-                  {t(tokens.dashboard.income)}
-                </Typography>
-                <Typography variant="h2">{centsToCurrency(totals.income)}</Typography>
-                <Typography color="text.secondary" variant="caption">
-                  {t(tokens.dashboard.incomeActiveCount, {
-                    count: activeIncomeEntries.length,
-                  })}
-                </Typography>
-              </Box>
-              <Typography
-                color="primary.main"
-                sx={{
-                  bottom: 16,
-                  cursor: "pointer",
-                  position: "absolute",
-                  right: 16,
-                  textDecoration: "underline",
-                }}
-                variant="body2"
-              >
-                {t(tokens.common.manage)}
-              </Typography>
-            </CardContent>
-          </Card>
-
-          <Card
-            onClick={() =>
-              expensesSectionRef.current?.scrollIntoView({
-                behavior: "smooth",
-                block: "start",
-              })
-            }
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                expensesSectionRef.current?.scrollIntoView({
-                  behavior: "smooth",
-                  block: "start",
-                });
-              }
-            }}
-            role="button"
-            tabIndex={0}
-            sx={{
-              cursor: "pointer",
-              position: "relative",
-              transition: "transform 160ms ease, box-shadow 160ms ease",
-              "&:hover": {
-                boxShadow: 6,
-                transform: "translateY(-2px)",
-              },
-            }}
-          >
-            <CardContent>
-              <Box sx={{ pr: 8 }}>
-                <Typography color="text.secondary" variant="body2">
-                  {t(tokens.dashboard.spent)}
-                </Typography>
-                <Typography color="error.main" variant="h2">
-                  {centsToCurrency(totals.spent)}
-                </Typography>
-              </Box>
-              <Typography
-                color="primary.main"
-                sx={{
-                  bottom: 16,
-                  cursor: "pointer",
-                  position: "absolute",
-                  right: 16,
-                  textDecoration: "underline",
-                }}
-                variant="body2"
-              >
-                {t(tokens.common.manage)}
-              </Typography>
-            </CardContent>
-          </Card>
-
-          <MetricCard
-            label={t(tokens.dashboard.planned)}
-            tone="warning"
-            value={centsToCurrency(totals.planned)}
-          />
-          <MetricCard
-            label={t(tokens.dashboard.unexpected)}
-            tone="error"
-            value={centsToCurrency(totals.unexpected)}
-          />
-          <MetricCard
-            label={t(tokens.dashboard.balance)}
-            tone={totals.balance < 0 ? "error" : "success"}
-            value={centsToCurrency(totals.balance)}
-          />
-        </Box>
-
-        <MonthlyComparisonChart data={comparisons} />
-
-        {totals.balance < 0 ? (
-          <Alert severity="error">{t(tokens.dashboard.statusOver)}</Alert>
-        ) : (
-          <Alert severity="success">{t(tokens.dashboard.statusOk)}</Alert>
-        )}
-
-        <Stack
-          ref={expensesSectionRef}
-          alignItems={{ xs: "stretch", md: "center" }}
-          direction={{ xs: "column", md: "row" }}
-          justifyContent="space-between"
-          spacing={2}
-        >
-          <Box>
-            <Typography variant="h2">{t(tokens.dashboard.expensesByTheme)}</Typography>
-            <Typography color="text.secondary">
-              {t(tokens.dashboard.expensesByThemeSubtitle)}
-            </Typography>
-          </Box>
-          <Button
-            onClick={() => setExpenseThemeDialogOpen(true)}
-            startIcon={<AddOutlined />}
-            sx={{
-              alignSelf: { xs: "stretch", md: "center" },
-              transition: "transform 160ms ease, box-shadow 160ms ease",
-              "&:hover": {
-                boxShadow: "0 14px 24px rgba(37, 99, 235, 0.22)",
-                transform: "translateY(-2px)",
-              },
-            }}
-            variant="contained"
-          >
-            {t(tokens.dashboard.addExpense)}
-          </Button>
-        </Stack>
-
-        <Box
-          sx={{
-            display: "grid",
-            gap: 2,
-            gridTemplateColumns: {
-              xs: "1fr",
-              sm: "repeat(2, minmax(0, 1fr))",
-              lg: "repeat(3, minmax(0, 1fr))",
-            },
-          }}
-        >
-          {themeSummaries.length === 0 ? (
-            <Alert severity="warning" sx={{ gridColumn: "1 / -1" }}>
-              {t(tokens.dashboard.noThemes)}
-            </Alert>
-          ) : (
-            themeSummaries.map((summary) => {
-              const progress =
-                summary.recommended_cents > 0
-                  ? Math.min((summary.total_cents / summary.recommended_cents) * 100, 140)
-                  : 0;
-              const isOver = summary.total_cents > summary.recommended_cents;
-
-              return (
-                <Card
-                  key={summary.id}
-                  onClick={() => handleOpenTheme(summary)}
-                  sx={{
-                    cursor: "pointer",
-                    transition: "border-color 160ms ease, transform 160ms ease",
-                    border: "1px solid",
-                    borderColor: isOver ? "error.light" : "divider",
-                    "&:hover": {
-                      borderColor: "primary.main",
-                      transform: "translateY(-2px)",
-                    },
-                  }}
-                >
-                  <CardContent>
-                    <Stack spacing={2}>
-                      <Stack direction="row" justifyContent="space-between" spacing={2}>
-                        <Box sx={{ minWidth: 0 }}>
-                          <Typography noWrap variant="h3">
-                            {summary.name}
-                          </Typography>
-                          <Typography color="text.secondary" noWrap variant="body2">
-                            {summary.description}
-                          </Typography>
-                        </Box>
-                        <Chip
-                          color={isOver ? "error" : "default"}
-                          label={basisPointsToPercentage(summary.default_percentage_bp)}
-                          size="small"
-                        />
-                      </Stack>
-
-                      <Box>
-                        <Typography color="text.secondary" variant="body2">
-                          {t(tokens.dashboard.themeSpent)}
-                        </Typography>
-                        <Typography variant="h2">
-                          {centsToCurrency(summary.total_cents)}
-                        </Typography>
-                      </Box>
-
-                      <LinearProgress
-                        color={isOver ? "error" : "primary"}
-                        value={progress}
-                        variant="determinate"
-                      />
-
-                      <Stack direction="row" justifyContent="space-between">
-                        <Typography color="text.secondary" variant="body2">
-                          {t(tokens.dashboard.themeRecommended)}
-                        </Typography>
-                        <Typography variant="body2">
-                          {centsToCurrency(summary.recommended_cents)}
-                        </Typography>
-                      </Stack>
-                    </Stack>
-                  </CardContent>
-                </Card>
-              );
+        <SummarySection
+          activeIncomeCount={activeIncomeEntries.length}
+          animationSx={monthContentAnimation}
+          currentMonth={currentMonth}
+          isLoading={isLoading}
+          onOpenIncome={() => setIncomeDrawerOpen(true)}
+          onScrollToExpenses={() =>
+            expensesSectionRef.current?.scrollIntoView({
+              behavior: "smooth",
+              block: "start",
             })
-          )}
-        </Box>
+          }
+          totals={totals}
+        />
+
+        <MonthlyDataSection
+          animationSx={monthContentAnimation}
+          comparisons={comparisons}
+          currentMonth={currentMonth}
+          goals={goals}
+          isLoading={isLoading}
+          totals={totals}
+        />
+
+        <ExpensesSection
+          animationSx={monthContentAnimation}
+          currentMonth={currentMonth}
+          isLoading={isLoading}
+          onAddExpense={() => setExpenseThemeDialogOpen(true)}
+          onOpenTheme={handleOpenTheme}
+          ref={expensesSectionRef}
+          themeSummaries={themeSummaries}
+        />
       </Stack>
 
       <EntryDrawer
@@ -1359,17 +1183,443 @@ function FinancialDashboard() {
   );
 }
 
-type MetricCardProps = {
-  label: string;
-  value: string;
-  tone?: "default" | "success" | "error" | "warning";
+type HeroSectionProps = {
+  currentMonth: Dayjs;
+  isCurrentMonth: boolean;
+  isLoading: boolean;
+  isMonthTransitioning: boolean;
+  onChangeMonth: (month: Dayjs) => void;
 };
+
+function HeroSection({
+  currentMonth,
+  isCurrentMonth,
+  isLoading,
+  isMonthTransitioning,
+  onChangeMonth,
+}: HeroSectionProps) {
+  const { t } = useTranslation();
+  const controlsDisabled = isLoading || isMonthTransitioning;
+
+  return (
+    <Card
+      sx={{
+        background: "linear-gradient(135deg, #1f2f55 0%, #5f8df7 100%)",
+        color: "common.white",
+        overflow: "hidden",
+      }}
+    >
+      <CardContent sx={{ p: { xs: 2.5, md: 4 }, "&:last-child": { pb: { xs: 2.5, md: 4 } } }}>
+        <Stack
+          alignItems={{ xs: "stretch", sm: "center" }}
+          direction={{ xs: "column", sm: "row" }}
+          justifyContent="space-between"
+          spacing={3}
+        >
+          <Box>
+            <Typography fontWeight={700} sx={{ opacity: 0.82 }} variant="body2">
+              {t(tokens.dashboard.financialView)}
+            </Typography>
+            <Typography sx={{ mt: 0.5 }} variant="h1">
+              {t(tokens.dashboard.monthlyBudget)}
+            </Typography>
+            <Typography sx={{ mt: 1, opacity: 0.88 }} variant="h3">
+              {currentMonth.format("MMMM [de] YYYY")}
+            </Typography>
+          </Box>
+
+          <Stack alignItems={{ xs: "stretch", sm: "flex-end" }} spacing={1.25}>
+            <Box
+              sx={{
+                alignItems: "center",
+                bgcolor: "rgba(255, 255, 255, 0.14)",
+                border: "1px solid rgba(255, 255, 255, 0.22)",
+                borderRadius: 2,
+                display: "grid",
+                gap: 0.75,
+                gridTemplateColumns: "auto minmax(0, 1fr) auto",
+                p: 0.75,
+              }}
+            >
+              <IconButton
+                aria-label={t(tokens.dashboard.previousMonth)}
+                disabled={controlsDisabled}
+                onClick={() => onChangeMonth(currentMonth.subtract(1, "month"))}
+                sx={{ color: "common.white" }}
+              >
+                <ArrowBackIosNewOutlined fontSize="small" />
+              </IconButton>
+              <Stack alignItems="center" spacing={0.25} sx={{ minWidth: { xs: 0, sm: 170 } }}>
+                <CalendarMonthOutlined fontSize="small" />
+                <Typography fontWeight={800} noWrap>
+                  {currentMonth.format("MMMM YYYY")}
+                </Typography>
+              </Stack>
+              <IconButton
+                aria-label={t(tokens.dashboard.nextMonth)}
+                disabled={controlsDisabled}
+                onClick={() => onChangeMonth(currentMonth.add(1, "month"))}
+                sx={{ color: "common.white" }}
+              >
+                <ArrowForwardIosOutlined fontSize="small" />
+              </IconButton>
+            </Box>
+
+            {isCurrentMonth ? (
+              <Chip
+                color="default"
+                label={t(tokens.dashboard.currentMonthHint)}
+                sx={{
+                  alignSelf: { xs: "stretch", sm: "flex-end" },
+                  bgcolor: "rgba(255, 255, 255, 0.18)",
+                  color: "common.white",
+                  fontWeight: 700,
+                }}
+              />
+            ) : (
+              <Button
+                color="inherit"
+                disabled={controlsDisabled}
+                onClick={() => onChangeMonth(dayjs().startOf("month"))}
+                startIcon={<ReplayOutlined />}
+                sx={{
+                  alignSelf: { xs: "stretch", sm: "flex-end" },
+                  bgcolor: "rgba(255, 255, 255, 0.18)",
+                  color: "common.white",
+                  "&:hover": { bgcolor: "rgba(255, 255, 255, 0.26)" },
+                }}
+                variant="contained"
+              >
+                {t(tokens.dashboard.backToCurrentMonth)}
+              </Button>
+            )}
+          </Stack>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+type AnimatedMonthSectionProps = {
+  animationSx: object;
+  children: ReactNode;
+  sectionKey: string;
+};
+
+function AnimatedMonthSection({ animationSx, children, sectionKey }: AnimatedMonthSectionProps) {
+  return (
+    <Box key={sectionKey} sx={animationSx}>
+      {children}
+    </Box>
+  );
+}
+
+type SummarySectionProps = {
+  activeIncomeCount: number;
+  animationSx: object;
+  currentMonth: Dayjs;
+  isLoading: boolean;
+  onOpenIncome: () => void;
+  onScrollToExpenses: () => void;
+  totals: DashboardTotals;
+};
+
+function SummarySection({
+  activeIncomeCount,
+  animationSx,
+  currentMonth,
+  isLoading,
+  onOpenIncome,
+  onScrollToExpenses,
+  totals,
+}: SummarySectionProps) {
+  const { t } = useTranslation();
+
+  return (
+    <AnimatedMonthSection animationSx={animationSx} sectionKey={`summary-${currentMonth.format("YYYY-MM")}`}>
+      <Box
+        sx={{
+          display: "grid",
+          gap: 2,
+          gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0, 1fr))" },
+        }}
+      >
+        <SummaryActionCard
+          actionLabel={t(tokens.common.manage)}
+          detail={t(tokens.dashboard.activeEntriesCount, { count: activeIncomeCount })}
+          isLoading={isLoading}
+          label={t(tokens.dashboard.monthIncome)}
+          onAction={onOpenIncome}
+          value={centsToCurrency(totals.income)}
+          valueColor="text.primary"
+        />
+        <SummaryActionCard
+          actionLabel={t(tokens.common.manage)}
+          detail={t(tokens.dashboard.expensesShortcut)}
+          isLoading={isLoading}
+          label={t(tokens.dashboard.totalSpent)}
+          onAction={onScrollToExpenses}
+          value={centsToCurrency(totals.spent)}
+          valueColor={totals.spent > totals.income ? "error.main" : "text.primary"}
+        />
+        <Card>
+          <CardContent>
+            <Typography color="text.secondary">{t(tokens.dashboard.balance)}</Typography>
+            {isLoading ? (
+              <Skeleton height={38} sx={{ mt: 0.5 }} width="58%" />
+            ) : (
+              <Typography color={totals.balance < 0 ? "error.main" : "success.main"} variant="h2">
+                {centsToCurrency(totals.balance)}
+              </Typography>
+            )}
+          </CardContent>
+        </Card>
+      </Box>
+    </AnimatedMonthSection>
+  );
+}
+
+type SummaryActionCardProps = {
+  actionLabel: string;
+  detail: string;
+  isLoading: boolean;
+  label: string;
+  onAction: () => void;
+  value: string;
+  valueColor: string;
+};
+
+function SummaryActionCard({
+  actionLabel,
+  detail,
+  isLoading,
+  label,
+  onAction,
+  value,
+  valueColor,
+}: SummaryActionCardProps) {
+  return (
+    <Card>
+      <CardContent>
+        <Stack
+          alignItems={{ xs: "stretch", sm: "center" }}
+          direction={{ xs: "column", sm: "row" }}
+          justifyContent="space-between"
+          spacing={2}
+        >
+          <Box>
+            <Typography color="text.secondary">{label}</Typography>
+            {isLoading ? (
+              <Skeleton height={38} sx={{ mt: 0.5 }} width={150} />
+            ) : (
+              <Typography color={valueColor} variant="h2">
+                {value}
+              </Typography>
+            )}
+            <Typography color="text.secondary" variant="body2">
+              {isLoading ? <Skeleton width={120} /> : detail}
+            </Typography>
+          </Box>
+          <Button
+            disabled={isLoading}
+            onClick={onAction}
+            startIcon={<AddOutlined />}
+            sx={{ alignSelf: { xs: "stretch", sm: "center" } }}
+            variant="contained"
+          >
+            {actionLabel}
+          </Button>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+type MonthlyDataSectionProps = {
+  animationSx: object;
+  comparisons: MonthlyComparison[];
+  currentMonth: Dayjs;
+  goals: Goal[];
+  isLoading: boolean;
+  totals: DashboardTotals;
+};
+
+function MonthlyDataSection({
+  animationSx,
+  comparisons,
+  currentMonth,
+  goals,
+  isLoading,
+  totals,
+}: MonthlyDataSectionProps) {
+  const { t } = useTranslation();
+
+  return (
+    <AnimatedMonthSection animationSx={animationSx} sectionKey={`monthly-data-${currentMonth.format("YYYY-MM")}`}>
+      <Stack spacing={3}>
+        <MonthlyComparisonChart data={comparisons} isLoading={isLoading} />
+
+        {isLoading ? (
+          <Skeleton height={48} sx={{ borderRadius: 2 }} variant="rectangular" />
+        ) : totals.balance < 0 ? (
+          <Alert severity="error">{t(tokens.dashboard.overBudget)}</Alert>
+        ) : (
+          <Alert severity="success">{t(tokens.dashboard.insideBudget)}</Alert>
+        )}
+
+        <GoalsSection goals={goals} isLoading={isLoading} />
+      </Stack>
+    </AnimatedMonthSection>
+  );
+}
+
+type ExpensesSectionProps = {
+  animationSx: object;
+  currentMonth: Dayjs;
+  isLoading: boolean;
+  onAddExpense: () => void;
+  onOpenTheme: (summary: ThemeSummary) => void;
+  themeSummaries: ThemeSummary[];
+};
+
+const ExpensesSection = forwardRef<HTMLDivElement, ExpensesSectionProps>(function ExpensesSection(
+  { animationSx, currentMonth, isLoading, onAddExpense, onOpenTheme, themeSummaries },
+  ref
+) {
+  const { t } = useTranslation();
+
+  return (
+    <AnimatedMonthSection animationSx={animationSx} sectionKey={`expenses-${currentMonth.format("YYYY-MM")}`}>
+      <Stack ref={ref} spacing={2}>
+        <Stack
+          alignItems={{ xs: "stretch", sm: "center" }}
+          direction={{ xs: "column", sm: "row" }}
+          justifyContent="space-between"
+          spacing={1.5}
+        >
+          <Box>
+            <Typography variant="h2">{t(tokens.dashboard.expensesTitle)}</Typography>
+            <Typography color="text.secondary" variant="body2">
+              {t(tokens.dashboard.expensesSubtitle)}
+            </Typography>
+          </Box>
+          <Button
+            disabled={isLoading}
+            onClick={onAddExpense}
+            startIcon={<AddOutlined />}
+            variant="contained"
+          >
+            {t(tokens.dashboard.addExpense)}
+          </Button>
+        </Stack>
+
+        <Box
+          sx={{
+            display: "grid",
+            gap: 2,
+            gridTemplateColumns: { xs: "1fr", lg: "repeat(2, minmax(0, 1fr))" },
+          }}
+        >
+          {isLoading
+            ? Array.from({ length: 6 }).map((_, index) => <ThemeSummarySkeleton key={index} />)
+            : themeSummaries.map((summary) => (
+                <ThemeSummaryCard
+                  key={summary.id}
+                  onOpen={() => onOpenTheme(summary)}
+                  summary={summary}
+                />
+              ))}
+        </Box>
+      </Stack>
+    </AnimatedMonthSection>
+  );
+});
+
+type ThemeSummaryCardProps = {
+  onOpen: () => void;
+  summary: ThemeSummary;
+};
+
+function ThemeSummaryCard({ onOpen, summary }: ThemeSummaryCardProps) {
+  const { t } = useTranslation();
+  const progress =
+    summary.recommended_cents > 0
+      ? Math.min((summary.total_cents / summary.recommended_cents) * 100, 100)
+      : 0;
+  const isOverRecommended = summary.recommended_cents > 0 && summary.total_cents > summary.recommended_cents;
+
+  return (
+    <Card
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
+      sx={{
+        cursor: "pointer",
+        transition: "transform 160ms ease, box-shadow 160ms ease",
+        "&:hover": {
+          boxShadow: "0 18px 42px rgba(15, 23, 42, 0.12)",
+          transform: "translateY(-2px)",
+        },
+      }}
+    >
+      <CardContent>
+        <Stack spacing={2}>
+          <Stack alignItems="flex-start" direction="row" justifyContent="space-between" spacing={2}>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography fontWeight={800}>{summary.name}</Typography>
+              <Typography color="text.secondary" variant="body2">
+                {basisPointsToPercentage(summary.default_percentage_bp)} {t(tokens.dashboard.recommended)}
+              </Typography>
+            </Box>
+            <Chip
+              color={summary.is_fixed ? "warning" : "error"}
+              label={summary.is_fixed ? t(tokens.dashboard.planned) : t(tokens.dashboard.unexpected)}
+              size="small"
+              sx={{ flexShrink: 0 }}
+            />
+          </Stack>
+
+          <Box>
+            <Typography color="text.secondary" variant="body2">
+              {t(tokens.dashboard.spent)}
+            </Typography>
+            <Typography color={summary.is_fixed ? "warning.main" : "error.main"} variant="h2">
+              {centsToCurrency(summary.total_cents)}
+            </Typography>
+          </Box>
+
+          <LinearProgress
+            color={isOverRecommended ? "error" : "primary"}
+            value={progress}
+            variant="determinate"
+          />
+
+          <Stack direction="row" justifyContent="space-between" spacing={1}>
+            <Typography color="text.secondary" variant="caption">
+              {basisPointsToPercentage(summary.spent_percentage_bp)}
+            </Typography>
+            <Typography color="text.secondary" variant="caption">
+              {t(tokens.dashboard.recommendedValue)} {centsToCurrency(summary.recommended_cents)}
+            </Typography>
+          </Stack>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
 
 type MonthlyComparisonChartProps = {
   data: MonthlyComparison[];
+  isLoading?: boolean;
 };
 
-function MonthlyComparisonChart({ data }: MonthlyComparisonChartProps) {
+function MonthlyComparisonChart({ data, isLoading = false }: MonthlyComparisonChartProps) {
   const { t } = useTranslation();
   const maxValue = Math.max(
     1,
@@ -1406,7 +1656,40 @@ function MonthlyComparisonChart({ data }: MonthlyComparisonChartProps) {
             </Stack>
           </Stack>
 
-          {data.length === 0 ? (
+          {isLoading ? (
+            <Box
+              sx={{
+                display: "grid",
+                gap: 1.5,
+                gridTemplateColumns: {
+                  xs: "1fr",
+                  md: "repeat(3, minmax(0, 1fr))",
+                },
+              }}
+            >
+              {Array.from({ length: 3 }).map((_, index) => (
+                <Box
+                  key={index}
+                  sx={{
+                    border: "1px solid",
+                    borderColor: "divider",
+                    borderRadius: 1,
+                    p: 1.5,
+                  }}
+                >
+                  <Stack spacing={1.25}>
+                    <Stack direction="row" justifyContent="space-between">
+                      <Skeleton height={20} width="34%" />
+                      <Skeleton height={20} width="28%" />
+                    </Stack>
+                    <Skeleton height={26} />
+                    <Skeleton height={26} />
+                    <Skeleton height={26} />
+                  </Stack>
+                </Box>
+              ))}
+            </Box>
+          ) : data.length === 0 ? (
             <Typography color="text.secondary" sx={{ py: 4 }} textAlign="center">
               {t(tokens.dashboard.comparisonEmpty)}
             </Typography>
@@ -1532,39 +1815,118 @@ function LegendDot({ color, label }: LegendDotProps) {
   );
 }
 
-function MetricCard({ label, tone = "default", value }: MetricCardProps) {
-  const toneMap = {
-    default: {
-      bgcolor: "background.paper",
-      color: "text.primary",
-      line: "primary.main",
-    },
-    error: {
-      bgcolor: financeColors.unexpectedSoft,
-      color: "error.main",
-      line: financeColors.unexpected,
-    },
-    success: {
-      bgcolor: financeColors.incomeSoft,
-      color: "success.main",
-      line: financeColors.income,
-    },
-    warning: {
-      bgcolor: financeColors.plannedSoft,
-      color: "warning.main",
-      line: financeColors.planned,
-    },
-  }[tone];
+type GoalsSectionProps = {
+  goals: Goal[];
+  isLoading: boolean;
+};
+
+function GoalsSection({ goals, isLoading }: GoalsSectionProps) {
+  const { t } = useTranslation();
 
   return (
-    <Card sx={{ bgcolor: toneMap.bgcolor, borderLeft: "4px solid", borderColor: toneMap.line }}>
+    <Card>
       <CardContent>
-        <Typography color="text.secondary" variant="body2">
-          {label}
-        </Typography>
-        <Typography color={toneMap.color} variant="h2">
-          {value}
-        </Typography>
+        <Stack spacing={2}>
+          <Stack alignItems="center" direction="row" spacing={1.5}>
+            <Avatar sx={{ bgcolor: "primary.main", height: 36, width: 36 }}>
+              <FlagOutlined fontSize="small" />
+            </Avatar>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="h3">{t(tokens.dashboard.goalsTitle)}</Typography>
+              <Typography color="text.secondary" variant="body2">
+                {t(tokens.dashboard.goalsSubtitle)}
+              </Typography>
+            </Box>
+          </Stack>
+
+          {isLoading ? (
+            <Box
+              sx={{
+                display: "grid",
+                gap: 1.5,
+                gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0, 1fr))" },
+              }}
+            >
+              {Array.from({ length: 3 }).map((_, index) => (
+                <Card key={index} variant="outlined">
+                  <CardContent sx={{ "&:last-child": { pb: 2 } }}>
+                    <Stack spacing={1}>
+                      <Skeleton height={22} width="72%" />
+                      <Skeleton height={30} width="52%" />
+                      <Skeleton height={8} sx={{ borderRadius: 999 }} variant="rectangular" />
+                    </Stack>
+                  </CardContent>
+                </Card>
+              ))}
+            </Box>
+          ) : goals.length === 0 ? (
+            <Alert severity="info">{t(tokens.dashboard.goalsEmpty)}</Alert>
+          ) : (
+            <Box
+              sx={{
+                display: "grid",
+                gap: 1.5,
+                gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0, 1fr))" },
+              }}
+            >
+              {goals.map((goal) => {
+                const progress =
+                  goal.target_value_cents > 0
+                    ? Math.min((goal.current_value_cents / goal.target_value_cents) * 100, 100)
+                    : 0;
+
+                return (
+                  <Card key={goal.id} variant="outlined">
+                    <CardContent sx={{ "&:last-child": { pb: 2 } }}>
+                      <Stack spacing={1}>
+                        <Typography fontWeight={800}>{goal.name}</Typography>
+                        <Typography color="primary.main" variant="h3">
+                          {centsToCurrency(goal.current_value_cents)}
+                        </Typography>
+                        <LinearProgress value={progress} variant="determinate" />
+                        <Stack direction="row" justifyContent="space-between">
+                          <Typography color="text.secondary" variant="caption">
+                            {Math.round(progress)}%
+                          </Typography>
+                          <Typography color="text.secondary" variant="caption">
+                            {centsToCurrency(goal.target_value_cents)}
+                          </Typography>
+                        </Stack>
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </Box>
+          )}
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ThemeSummarySkeleton() {
+  return (
+    <Card>
+      <CardContent>
+        <Stack spacing={2}>
+          <Stack direction="row" justifyContent="space-between" spacing={2}>
+            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+              <Skeleton height={24} width="62%" />
+              <Skeleton height={18} width="82%" />
+            </Box>
+            <Skeleton height={24} sx={{ borderRadius: 4 }} width={54} />
+          </Stack>
+          <Box>
+            <Skeleton height={18} width="24%" />
+            <Skeleton height={34} width="48%" />
+          </Box>
+          <Skeleton height={8} sx={{ borderRadius: 999 }} variant="rectangular" />
+          <Stack direction="row" justifyContent="space-between">
+            <Skeleton height={18} width="32%" />
+            <Skeleton height={18} width="28%" />
+          </Stack>
+        </Stack>
       </CardContent>
     </Card>
   );

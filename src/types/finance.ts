@@ -61,6 +61,19 @@ export type MonthlyComparison = {
   balance_cents: number;
 };
 
+export type Goal = {
+  id: string;
+  user_id: string;
+  budget_month_id: string | null;
+  name: string;
+  target_value_cents: number;
+  current_value_cents: number;
+  target_date: string | null;
+  created_at: string;
+  updated_at: string | null;
+  deleted_at: string | null;
+};
+
 export type ThemeSummary = BudgetTheme & {
   total_cents: number;
   recommended_cents: number;

@@ -1,8 +1,5 @@
 import type { ReactNode } from "react";
-import {
-  AccountBalanceWalletOutlined,
-  LogoutOutlined,
-} from "@mui/icons-material";
+import { LogoutOutlined } from "@mui/icons-material";
 import {
   AppBar,
   Avatar,
@@ -74,15 +71,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             }}
             sx={{ cursor: "pointer" }}
           >
-            <Avatar
+            <Box
+              alt={t(tokens.common.appName)}
+              component="img"
+              src="/assets/app-logo.svg"
               sx={{
-                bgcolor: "primary.main",
+                borderRadius: { xs: 2, sm: 2.25 },
+                boxShadow: "0 8px 18px rgba(37, 99, 235, 0.22)",
                 height: { xs: 38, sm: 40 },
                 width: { xs: 38, sm: 40 },
               }}
-            >
-              <AccountBalanceWalletOutlined />
-            </Avatar>
+            />
             <Box sx={{ minWidth: 0 }}>
               <Typography
                 noWrap

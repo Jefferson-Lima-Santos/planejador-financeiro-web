@@ -81,6 +81,10 @@ export const ptBR = {
   [tokens.dashboard.expensesByThemeSubtitle]:
     "Clique em um tema ou use o botão Adicionar gasto para lançar despesas.",
   [tokens.dashboard.financialOverview]: "Visão financeira",
+  [tokens.dashboard.goalsEmpty]: "Nenhuma meta cadastrada para este mês.",
+  [tokens.dashboard.goalsSubtitle]: "Acompanhe objetivos financeiros ligados ao mês selecionado.",
+  [tokens.dashboard.goalsTitle]: "Metas",
+  [tokens.dashboard.currentMonthBadge]: "Você está no mês atual",
   [tokens.dashboard.income]: "Receitas",
   [tokens.dashboard.incomeActiveCount]: "{{count}} entradas ativas",
   [tokens.dashboard.incomeActiveTab]: "Ativas ({{count}})",
@@ -102,6 +106,7 @@ export const ptBR = {
     "Nenhum tema encontrado. Verifique se o script do banco criou os temas iniciais.",
   [tokens.dashboard.planned]: "Previstos",
   [tokens.dashboard.previousMonth]: "Mês anterior",
+  [tokens.dashboard.backToCurrentMonth]: "Voltar ao mês atual",
   [tokens.dashboard.recurring]: "Recorrente",
   [tokens.dashboard.repeatUntil]: "Repetir até",
   [tokens.dashboard.repeatUntilHelp]: "Deixe em branco para repetir sem data final.",
@@ -117,6 +122,7 @@ export const ptBR = {
   [tokens.dashboard.statusOver]: "Atenção: você gastou mais do que ganhou neste mês.",
   [tokens.dashboard.themeRecommended]: "Recomendado",
   [tokens.dashboard.themeSpent]: "Gasto",
+  [tokens.dashboard.today]: "Hoje",
   [tokens.dashboard.totalActive]: "Total ativo",
   [tokens.dashboard.unexpected]: "Imprevistos",
 

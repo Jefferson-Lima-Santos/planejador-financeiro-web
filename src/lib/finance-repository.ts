@@ -4,6 +4,7 @@ import type {
   AuditLogTableName,
   BudgetMonth,
   BudgetTheme,
+  Goal,
   MonthlyComparison,
   MonthlyIncomeEntry,
   MonthlyThemeEntry,
@@ -272,6 +273,26 @@ export async function listMonthIncomeEntries(
   }
 
   return (data ?? []) as MonthlyIncomeEntry[];
+}
+
+export async function listMonthGoals(budgetMonthId: string): Promise<Goal[]> {
+  const client = requireSupabase();
+  const authenticatedUserId = await requireAuthenticatedUserId();
+
+  const { data, error } = await client
+    .from("goals")
+    .select("*")
+    .eq("user_id", authenticatedUserId)
+    .eq("budget_month_id", budgetMonthId)
+    .is("deleted_at", null)
+    .order("target_date", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []) as Goal[];
 }
 
 export async function listAuditLogsForRecord(
