@@ -188,10 +188,12 @@ export async function materializeRecurringEntries(
           budget_month_id: budgetMonthId,
           description: recurring.description,
           entry_date: entryDate,
+          goal_id: recurring.goal_id,
           notes: recurring.notes,
           recurring_entry_id: recurring.id,
           theme_id: recurring.theme_id,
           user_id: authenticatedUserId,
+          yield_percentage_bp: recurring.yield_percentage_bp ?? 0,
         });
 
       if (insertError) {
@@ -206,7 +208,7 @@ export async function listBudgetThemes(): Promise<BudgetTheme[]> {
 
   const { data, error } = await client
     .from("budget_themes")
-    .select("id, name, description, default_percentage_bp, sort_order")
+    .select("id, name, description, default_percentage_bp, target_behavior, sort_order")
     .is("deleted_at", null)
     .order("sort_order", { ascending: true });
 
@@ -222,7 +224,7 @@ export async function getRecurringEntry(entryId: string): Promise<RecurringEntry
 
   const { data, error } = await client
     .from("recurring_entries")
-    .select("id, entry_day, start_year, start_month, end_year, end_month")
+    .select("id, entry_day, start_year, start_month, end_year, end_month, yield_percentage_bp, goal_id")
     .eq("id", entryId)
     .maybeSingle();
 
@@ -411,6 +413,8 @@ export async function createIncomeEntry(input: {
   notes?: string;
   isRecurring?: boolean;
   recurrenceEndDate?: string;
+  yieldPercentageBp?: number;
+  goalId?: string;
 }): Promise<void> {
   const client = requireSupabase();
   const authenticatedUserId = await requireAuthenticatedUserId();
@@ -535,6 +539,8 @@ export async function createEntry(input: {
   notes?: string;
   isRecurring?: boolean;
   recurrenceEndDate?: string;
+  yieldPercentageBp?: number;
+  goalId?: string;
 }): Promise<void> {
   const client = requireSupabase();
   const authenticatedUserId = await requireAuthenticatedUserId();
@@ -554,11 +560,13 @@ export async function createEntry(input: {
         end_year: end?.year ?? null,
         entry_day: getDayOfMonth(input.entryDate),
         entry_type: "expense",
+        goal_id: input.goalId || null,
         notes: input.notes || null,
         start_month: start.month,
         start_year: start.year,
         theme_id: input.themeId,
         user_id: authenticatedUserId,
+        yield_percentage_bp: input.yieldPercentageBp ?? 0,
       })
       .select("id")
       .single();
@@ -578,7 +586,9 @@ export async function createEntry(input: {
     description: input.description,
     amount_cents: input.amountCents,
     entry_date: input.entryDate,
+    goal_id: input.goalId || null,
     notes: input.notes || null,
+    yield_percentage_bp: input.yieldPercentageBp ?? 0,
   });
 
   if (error) {
@@ -597,6 +607,8 @@ export async function updateEntry(input: {
   existingRecurringEntryId?: string | null;
   notes?: string;
   changeReason?: string;
+  yieldPercentageBp?: number;
+  goalId?: string;
 }): Promise<void> {
   const client = requireSupabase();
   const authenticatedUserId = await requireAuthenticatedUserId();
@@ -614,11 +626,13 @@ export async function updateEntry(input: {
         description: input.description,
         entry_day: getDayOfMonth(input.entryDate),
         entry_type: "expense",
+        goal_id: input.goalId || null,
         notes: input.notes || null,
         start_month: start.month,
         start_year: start.year,
         theme_id: input.themeId,
         updated_at: now,
+        yield_percentage_bp: input.yieldPercentageBp ?? 0,
         deleted_at: null,
         deleted_reason: null,
       };
@@ -646,11 +660,13 @@ export async function updateEntry(input: {
           end_year: end?.year ?? null,
           entry_day: getDayOfMonth(input.entryDate),
           entry_type: "expense",
+          goal_id: input.goalId || null,
           notes: input.notes || null,
           start_month: start.month,
           start_year: start.year,
           theme_id: input.themeId,
           user_id: authenticatedUserId,
+          yield_percentage_bp: input.yieldPercentageBp ?? 0,
         })
         .select("id")
         .single();
@@ -686,9 +702,11 @@ export async function updateEntry(input: {
       amount_cents: input.amountCents,
       change_reason: input.changeReason || null,
       entry_date: input.entryDate,
+      goal_id: input.goalId || null,
       notes: input.notes || null,
       recurring_entry_id: recurringEntryId,
       updated_at: now,
+      yield_percentage_bp: input.yieldPercentageBp ?? 0,
     })
     .eq("id", input.entryId);
 

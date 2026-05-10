@@ -41,6 +41,24 @@ export const themeChartColors = [
 export type ExpenseHealth = "ok" | "over" | "critical";
 
 export const getExpenseHealth = (summary: ThemeSummary): ExpenseHealth => {
+  if (summary.target_behavior === "saving_goal") {
+    if (summary.recommended_cents <= 0) {
+      return summary.total_cents > 0 ? "ok" : "over";
+    }
+
+    const usage = summary.total_cents / summary.recommended_cents;
+
+    if (usage >= 1) {
+      return "ok";
+    }
+
+    if (usage >= 0.5) {
+      return "over";
+    }
+
+    return "critical";
+  }
+
   if (summary.recommended_cents <= 0) {
     return summary.total_cents > 0 ? "critical" : "ok";
   }

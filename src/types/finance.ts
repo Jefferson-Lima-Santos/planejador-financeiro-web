@@ -14,6 +14,7 @@ export type BudgetTheme = {
   name: string;
   description: string | null;
   default_percentage_bp: number;
+  target_behavior: "expense_limit" | "saving_goal";
   sort_order: number;
 };
 
@@ -27,6 +28,8 @@ export type MonthlyThemeEntry = {
   amount_cents: number;
   entry_date: string;
   notes: string | null;
+  yield_percentage_bp: number;
+  goal_id: string | null;
   change_reason: string | null;
   created_at: string;
   updated_at: string | null;
@@ -88,6 +91,8 @@ export type EntryFormValues = {
   isRecurring: boolean;
   recurrenceEndDate: string;
   changeReason: string;
+  yieldPercentage: string;
+  goalId: string;
 };
 
 export type RecurringEntry = {
@@ -97,6 +102,8 @@ export type RecurringEntry = {
   start_month: number;
   end_year: number | null;
   end_month: number | null;
+  yield_percentage_bp: number;
+  goal_id: string | null;
 };
 
 export type AuditLogAction =

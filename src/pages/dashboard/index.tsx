@@ -99,6 +99,8 @@ const emptyEntryForm = (themeId = ""): EntryFormValues & { themeId: string } => 
   notes: "",
   recurrenceEndDate: "",
   themeId,
+  yieldPercentage: "",
+  goalId: "",
 });
 
 const emptyIncomeForm = (): EntryFormValues => ({
@@ -109,7 +111,23 @@ const emptyIncomeForm = (): EntryFormValues => ({
   isRecurring: false,
   notes: "",
   recurrenceEndDate: "",
+  yieldPercentage: "",
+  goalId: "",
 });
+
+const percentageInputToBasisPoints = (value: string): number => {
+  const normalized = value.replace(",", ".").replace(/[^\d.]/g, "");
+  const parsed = Number(normalized);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+
+  return Math.round(parsed * 100);
+};
+
+const basisPointsToInputValue = (value: number): string =>
+  value > 0 ? (value / 100).toString().replace(".", ",") : "";
 
 const sortAuditLogs = (logs: AuditLog[]) =>
   [...logs].sort(
@@ -277,6 +295,19 @@ function FinancialDashboard() {
     });
   }, [activeEntries, incomeTotalCents, themes]);
 
+  const goalsWithSavings = useMemo<Goal[]>(() => {
+    return goals.map((goal) => {
+      const linkedSavings = activeEntries
+        .filter((entry) => entry.goal_id === goal.id)
+        .reduce((sum, entry) => sum + entry.amount_cents, 0);
+
+      return {
+        ...goal,
+        current_value_cents: goal.current_value_cents + linkedSavings,
+      };
+    });
+  }, [activeEntries, goals]);
+
   const totals = useMemo(() => {
     const spent = activeEntries.reduce((sum, entry) => sum + entry.amount_cents, 0);
     const planned = activeEntries
@@ -399,6 +430,8 @@ function FinancialDashboard() {
       isRecurring: false,
       notes: entry.notes ?? "",
       recurrenceEndDate: "",
+      yieldPercentage: "",
+      goalId: "",
     });
     setIncomeEditDialogOpen(true);
   };
@@ -485,6 +518,8 @@ function FinancialDashboard() {
       notes: entry.notes ?? "",
       recurrenceEndDate: "",
       themeId: entry.theme_id,
+      yieldPercentage: basisPointsToInputValue(entry.yield_percentage_bp ?? 0),
+      goalId: entry.goal_id ?? "",
     });
 
     setExpenseEditDialogOpen(true);
@@ -562,6 +597,8 @@ function FinancialDashboard() {
           notes: formValues.notes,
           recurrenceEndDate: formValues.recurrenceEndDate,
           themeId: editingEntry.theme_id,
+          yieldPercentageBp: percentageInputToBasisPoints(formValues.yieldPercentage),
+          goalId: formValues.goalId,
         });
         toast.success(t(tokens.dashboard.expenseUpdated));
       } else {
@@ -575,6 +612,8 @@ function FinancialDashboard() {
           recurrenceEndDate: formValues.recurrenceEndDate,
           themeId: selectedTheme.id,
           userId: user.id,
+          yieldPercentageBp: percentageInputToBasisPoints(formValues.yieldPercentage),
+          goalId: formValues.goalId,
         });
         toast.success(t(tokens.dashboard.expenseAdded));
       }
@@ -714,7 +753,7 @@ function FinancialDashboard() {
           animationSx={monthContentAnimation}
           comparisons={comparisons}
           currentMonth={currentMonth}
-          goals={goals}
+          goals={goalsWithSavings}
           isLoading={isLoading}
           totals={totals}
         />
@@ -736,6 +775,7 @@ function FinancialDashboard() {
         drawerTab={drawerTab}
         editingEntry={editingEntry}
         formValues={formValues}
+        goals={goals}
         isSaving={isSaving}
         onClose={() => setSelectedTheme(null)}
         onDelete={(entry) => setDeleteTarget(entry)}
@@ -852,6 +892,38 @@ function FinancialDashboard() {
                   placeholder={t(tokens.common.optional)}
                   value={formValues.changeReason}
                 />
+
+                {selectedTheme?.target_behavior === "saving_goal" && (
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                    <AppTextField
+                      fullWidth
+                      helperText={t(tokens.dashboard.monthlyReturnHelp)}
+                      label={t(tokens.dashboard.monthlyReturn)}
+                      onChange={(event) =>
+                        setFormValues({ ...formValues, yieldPercentage: event.target.value })
+                      }
+                      placeholder="0,00%"
+                      value={formValues.yieldPercentage}
+                    />
+                    <AppTextField
+                      fullWidth
+                      label={t(tokens.dashboard.linkedGoal)}
+                      onChange={(event) =>
+                        setFormValues({ ...formValues, goalId: event.target.value })
+                      }
+                      select
+                      SelectProps={{ native: true }}
+                      value={formValues.goalId}
+                    >
+                      <option value="">{t(tokens.dashboard.noLinkedGoal)}</option>
+                      {goals.map((goal) => (
+                        <option key={goal.id} value={goal.id}>
+                          {goal.name}
+                        </option>
+                      ))}
+                    </AppTextField>
+                  </Stack>
+                )}
 
                 <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
                   <FormControlLabel
@@ -1528,6 +1600,7 @@ type EntryDrawerProps = {
   drawerTab: "active" | "deleted";
   editingEntry: MonthlyThemeEntry | null;
   formValues: EntryFormValues & { themeId: string };
+  goals: Goal[];
   isSaving: boolean;
   onCancelEdit: () => void;
   onClose: () => void;
@@ -1547,6 +1620,7 @@ function EntryDrawer({
   drawerTab,
   editingEntry,
   formValues,
+  goals,
   isSaving,
   onCancelEdit,
   onClose,
@@ -1561,6 +1635,7 @@ function EntryDrawer({
 }: EntryDrawerProps) {
   const { t } = useTranslation();
   const visibleEntries = drawerTab === "active" ? activeEntries : deletedEntries;
+  const isSavingTheme = theme?.target_behavior === "saving_goal";
 
   const handleEditClick = (entry: MonthlyThemeEntry) => {
     onEdit(entry);
@@ -1656,6 +1731,41 @@ function EntryDrawer({
                       placeholder={t(tokens.common.optional)}
                       value={formValues.changeReason}
                     />
+                  )}
+
+                  {isSavingTheme && (
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                      <AppTextField
+                        fullWidth
+                        helperText={t(tokens.dashboard.monthlyReturnHelp)}
+                        label={t(tokens.dashboard.monthlyReturn)}
+                        onChange={(event) =>
+                          onFormChange({
+                            ...formValues,
+                            yieldPercentage: event.target.value,
+                          })
+                        }
+                        placeholder="0,00%"
+                        value={formValues.yieldPercentage}
+                      />
+                      <AppTextField
+                        fullWidth
+                        label={t(tokens.dashboard.linkedGoal)}
+                        onChange={(event) =>
+                          onFormChange({ ...formValues, goalId: event.target.value })
+                        }
+                        select
+                        SelectProps={{ native: true }}
+                        value={formValues.goalId}
+                      >
+                        <option value="">{t(tokens.dashboard.noLinkedGoal)}</option>
+                        {goals.map((goal) => (
+                          <option key={goal.id} value={goal.id}>
+                            {goal.name}
+                          </option>
+                        ))}
+                      </AppTextField>
+                    </Stack>
                   )}
 
                   <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
@@ -1775,6 +1885,21 @@ function EntryDrawer({
                         </Typography>
                       )}
 
+                      {isSavingTheme && (
+                        <Typography color="text.secondary" variant="caption">
+                          {t(tokens.dashboard.monthlyReturn)}:{" "}
+                          {entry.yield_percentage_bp
+                            ? `${(entry.yield_percentage_bp / 100).toLocaleString("pt-BR")}%`
+                            : "0%"}
+                          {entry.goal_id
+                            ? ` - ${t(tokens.dashboard.linkedGoal)}: ${
+                                goals.find((goal) => goal.id === entry.goal_id)?.name ??
+                                t(tokens.dashboard.noLinkedGoal)
+                              }`
+                            : ""}
+                        </Typography>
+                      )}
+
                       <Stack direction="row" justifyContent="space-between" alignItems="center">
                         <Chip
                           label={
@@ -1877,6 +2002,20 @@ function EntryDrawer({
                     {(entry.notes || entry.deleted_reason) && (
                       <Typography color="text.secondary" variant="caption">
                         {entry.notes || entry.deleted_reason}
+                      </Typography>
+                    )}
+                    {isSavingTheme && (
+                      <Typography color="text.secondary" variant="caption">
+                        {t(tokens.dashboard.monthlyReturn)}:{" "}
+                        {entry.yield_percentage_bp
+                          ? `${(entry.yield_percentage_bp / 100).toLocaleString("pt-BR")}%`
+                          : "0%"}
+                        {entry.goal_id
+                          ? ` - ${t(tokens.dashboard.linkedGoal)}: ${
+                              goals.find((goal) => goal.id === entry.goal_id)?.name ??
+                              t(tokens.dashboard.noLinkedGoal)
+                            }`
+                          : ""}
                       </Typography>
                     )}
                   </TableCell>

@@ -19,11 +19,18 @@ export const ThemeSummaryCard = ({ onOpen, summary }: ThemeSummaryCardProps) => 
       : 0;
   const health = getExpenseHealth(summary);
   const healthColors = expenseHealthColors[health];
-  const healthLabel = {
-    critical: t(tokens.dashboard.expenseStatusCritical),
-    ok: t(tokens.dashboard.expenseStatusOk),
-    over: t(tokens.dashboard.expenseStatusOver),
-  }[health];
+  const isSavingGoal = summary.target_behavior === "saving_goal";
+  const healthLabel = isSavingGoal
+    ? {
+        critical: t(tokens.dashboard.savingStatusCritical),
+        ok: t(tokens.dashboard.savingStatusOk),
+        over: t(tokens.dashboard.savingStatusOver),
+      }[health]
+    : {
+        critical: t(tokens.dashboard.expenseStatusCritical),
+        ok: t(tokens.dashboard.expenseStatusOk),
+        over: t(tokens.dashboard.expenseStatusOver),
+      }[health];
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Enter" || event.key === " ") {
@@ -57,7 +64,9 @@ export const ThemeSummaryCard = ({ onOpen, summary }: ThemeSummaryCardProps) => 
               <Typography fontWeight={800}>{summary.name}</Typography>
               <Typography color="text.secondary" variant="body2">
                 {basisPointsToPercentage(summary.default_percentage_bp)}{" "}
-                {t(tokens.dashboard.themeRecommended)}
+                {isSavingGoal
+                  ? t(tokens.dashboard.recommendedMinimum)
+                  : t(tokens.dashboard.themeRecommended)}
               </Typography>
             </Box>
             <Chip
@@ -74,7 +83,7 @@ export const ThemeSummaryCard = ({ onOpen, summary }: ThemeSummaryCardProps) => 
 
           <Box>
             <Typography color="text.secondary" variant="body2">
-              {t(tokens.dashboard.spent)}
+              {isSavingGoal ? t(tokens.dashboard.savedAmount) : t(tokens.dashboard.spent)}
             </Typography>
             <Typography color={healthColors.main} variant="h2">
               {centsToCurrency(summary.total_cents)}
@@ -95,7 +104,10 @@ export const ThemeSummaryCard = ({ onOpen, summary }: ThemeSummaryCardProps) => 
               {basisPointsToPercentage(summary.spent_percentage_bp)}
             </Typography>
             <Typography color="text.secondary" variant="caption">
-              {t(tokens.dashboard.themeRecommended)} {centsToCurrency(summary.recommended_cents)}
+              {isSavingGoal
+                ? t(tokens.dashboard.recommendedMinimum)
+                : t(tokens.dashboard.themeRecommended)}{" "}
+              {centsToCurrency(summary.recommended_cents)}
             </Typography>
           </Stack>
         </Stack>

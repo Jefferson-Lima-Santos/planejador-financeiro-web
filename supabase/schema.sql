@@ -59,6 +59,8 @@ create table if not exists public.recurring_entries (
   end_year integer,
   end_month integer check (end_month between 1 and 12),
   notes text,
+  yield_percentage_bp integer not null default 0 check (yield_percentage_bp >= 0),
+  goal_id uuid,
   created_at timestamptz not null default now(),
   updated_at timestamptz,
   deleted_at timestamptz,
@@ -70,6 +72,8 @@ create table if not exists public.budget_themes (
   name text not null,
   description text,
   default_percentage_bp integer not null check (default_percentage_bp >= 0),
+  target_behavior text not null default 'expense_limit'
+    check (target_behavior in ('expense_limit', 'saving_goal')),
   sort_order integer not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz,
@@ -90,6 +94,8 @@ create table if not exists public.monthly_theme_entries (
   amount_cents integer not null check (amount_cents >= 0),
   entry_date date not null,
   notes text,
+  yield_percentage_bp integer not null default 0 check (yield_percentage_bp >= 0),
+  goal_id uuid,
   change_reason text,
   created_at timestamptz not null default now(),
   updated_at timestamptz,
@@ -145,9 +151,38 @@ alter table public.monthly_income_entries alter column user_id set default auth.
 alter table public.monthly_income_entries add column if not exists recurring_entry_id uuid;
 alter table public.monthly_income_entries add column if not exists change_reason text;
 alter table public.recurring_entries alter column user_id set default auth.uid();
+alter table public.recurring_entries add column if not exists yield_percentage_bp integer not null default 0 check (yield_percentage_bp >= 0);
+alter table public.recurring_entries add column if not exists goal_id uuid;
 alter table public.monthly_theme_entries alter column user_id set default auth.uid();
 alter table public.monthly_theme_entries add column if not exists recurring_entry_id uuid;
 alter table public.monthly_theme_entries add column if not exists change_reason text;
+alter table public.monthly_theme_entries add column if not exists yield_percentage_bp integer not null default 0 check (yield_percentage_bp >= 0);
+alter table public.monthly_theme_entries add column if not exists goal_id uuid references public.goals(id) on delete set null;
+alter table public.budget_themes add column if not exists target_behavior text not null default 'expense_limit'
+  check (target_behavior in ('expense_limit', 'saving_goal'));
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'monthly_theme_entries_goal_id_fkey'
+  ) then
+    alter table public.monthly_theme_entries
+      add constraint monthly_theme_entries_goal_id_fkey
+      foreign key (goal_id) references public.goals(id) on delete set null;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'recurring_entries_goal_id_fkey'
+  ) then
+    alter table public.recurring_entries
+      add constraint recurring_entries_goal_id_fkey
+      foreign key (goal_id) references public.goals(id) on delete set null;
+  end if;
+end $$;
 alter table public.goals alter column user_id set default auth.uid();
 alter table public.audit_logs add column if not exists reason text;
 
@@ -326,20 +361,24 @@ create trigger audit_goals
   for each row execute function public.audit_row_changes();
 
 insert into public.budget_themes
-  (name, description, default_percentage_bp, sort_order)
+  (name, description, default_percentage_bp, target_behavior, sort_order)
 select *
 from (
   values
-    ('Gastos fixos', 'Aluguel, internet, luz, agua, gas, alimentacao etc', 3500, 1),
-    ('Cartao de credito', 'Compras, parcelas e despesas pagas no cartao', 2000, 2),
-    ('Educacao', 'Cursos, faculdade, pos-graduacao, idiomas etc', 1000, 3),
-    ('Gastos excepcionais', 'Despesas fora do orcamento fixo', 1500, 4),
-    ('Poupanca para o futuro', 'Dinheiro guardado ou investido', 1000, 5),
-    ('Gastos livres', 'Demais gastos pessoais', 1000, 6)
-) as seed(name, description, default_percentage_bp, sort_order)
+    ('Gastos fixos', 'Aluguel, internet, luz, agua, gas, alimentacao etc', 3500, 'expense_limit', 1),
+    ('Cartao de credito', 'Compras, parcelas e despesas pagas no cartao', 2000, 'expense_limit', 2),
+    ('Educacao', 'Cursos, faculdade, pos-graduacao, idiomas etc', 1000, 'expense_limit', 3),
+    ('Gastos excepcionais', 'Despesas fora do orcamento fixo', 1500, 'expense_limit', 4),
+    ('Poupanca para o futuro', 'Dinheiro guardado ou investido', 1000, 'saving_goal', 5),
+    ('Gastos livres', 'Demais gastos pessoais', 1000, 'expense_limit', 6)
+) as seed(name, description, default_percentage_bp, target_behavior, sort_order)
 where not exists (
   select 1
   from public.budget_themes existing
   where lower(existing.name) = lower(seed.name)
     and existing.deleted_at is null
 );
+
+update public.budget_themes
+set target_behavior = 'saving_goal'
+where lower(name) = lower('Poupanca para o futuro');
