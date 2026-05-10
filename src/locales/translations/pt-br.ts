@@ -80,6 +80,15 @@ export const ptBR = {
   [tokens.dashboard.expensesByTheme]: "Gastos por tema",
   [tokens.dashboard.expensesByThemeSubtitle]:
     "Clique em um tema ou use o botão Adicionar gasto para lançar despesas.",
+  [tokens.dashboard.expenseDistributionSubtitle]:
+    "Veja quais temas mais pesam no gasto total do mês.",
+  [tokens.dashboard.expenseDistributionTitle]: "Distribuição dos gastos",
+  [tokens.dashboard.expenseLimitSubtitle]:
+    "Compare cada tema com o valor recomendado para o mês.",
+  [tokens.dashboard.expenseLimitTitle]: "Uso do recomendado",
+  [tokens.dashboard.expenseStatusCritical]: "Passou muito",
+  [tokens.dashboard.expenseStatusOk]: "Dentro do limite",
+  [tokens.dashboard.expenseStatusOver]: "Passou do limite",
   [tokens.dashboard.financialOverview]: "Visão financeira",
   [tokens.dashboard.goalsEmpty]: "Nenhuma meta cadastrada para este mês.",
   [tokens.dashboard.goalsSubtitle]: "Acompanhe objetivos financeiros ligados ao mês selecionado.",

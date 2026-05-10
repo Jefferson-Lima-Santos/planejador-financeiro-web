@@ -59,6 +59,18 @@ import {
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { useRecoilValue } from "recoil";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip as RechartsTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { AppTextField, MoneyTextField } from "@/components/form-fields";
 import { AuthGuard } from "@/guards/auth-guard";
 import { DashboardLayout } from "@/layouts/dashboard-layout";
@@ -134,6 +146,24 @@ const financeColors = {
   unexpectedSoft: "rgba(185, 28, 28, 0.1)",
 };
 
+const expenseHealthColors = {
+  critical: {
+    border: "#b91c1c",
+    main: "#b91c1c",
+    soft: "rgba(185, 28, 28, 0.1)",
+  },
+  ok: {
+    border: "#15803d",
+    main: "#15803d",
+    soft: "rgba(21, 128, 61, 0.1)",
+  },
+  over: {
+    border: "#b45309",
+    main: "#b45309",
+    soft: "rgba(180, 83, 9, 0.11)",
+  },
+};
+
 const sortAuditLogs = (logs: AuditLog[]) =>
   [...logs].sort(
     (first, second) =>
@@ -148,6 +178,25 @@ type DashboardTotals = {
   planned: number;
   spent: number;
   unexpected: number;
+};
+type ExpenseHealth = "ok" | "over" | "critical";
+
+const getExpenseHealth = (summary: ThemeSummary): ExpenseHealth => {
+  if (summary.recommended_cents <= 0) {
+    return summary.total_cents > 0 ? "critical" : "ok";
+  }
+
+  const usage = summary.total_cents / summary.recommended_cents;
+
+  if (usage > 1.2) {
+    return "critical";
+  }
+
+  if (usage > 1) {
+    return "over";
+  }
+
+  return "ok";
 };
 
 export default function DashboardPage() {
@@ -1542,6 +1591,8 @@ const ExpensesSection = forwardRef<HTMLDivElement, ExpensesSectionProps>(functio
           </Button>
         </Stack>
 
+        <ExpenseChartsSection isLoading={isLoading} themeSummaries={themeSummaries} />
+
         <Box
           sx={{
             display: "grid",
@@ -1564,6 +1615,134 @@ const ExpensesSection = forwardRef<HTMLDivElement, ExpensesSectionProps>(functio
   );
 });
 
+type ExpenseChartsSectionProps = {
+  isLoading: boolean;
+  themeSummaries: ThemeSummary[];
+};
+
+function ExpenseChartsSection({ isLoading, themeSummaries }: ExpenseChartsSectionProps) {
+  const { t } = useTranslation();
+  const spentData = themeSummaries
+    .filter((summary) => summary.total_cents > 0)
+    .map((summary) => ({
+      color: expenseHealthColors[getExpenseHealth(summary)].main,
+      name: summary.name,
+      value: summary.total_cents,
+    }));
+  const usageData = themeSummaries.map((summary) => ({
+    color: expenseHealthColors[getExpenseHealth(summary)].main,
+    name: summary.name,
+    usage:
+      summary.recommended_cents > 0
+        ? Math.round((summary.total_cents / summary.recommended_cents) * 100)
+        : summary.total_cents > 0
+        ? 130
+        : 0,
+  }));
+
+  if (isLoading) {
+    return (
+      <Box
+        sx={{
+          display: "grid",
+          gap: 2,
+          gridTemplateColumns: { xs: "1fr", lg: "repeat(2, minmax(0, 1fr))" },
+        }}
+      >
+        <Skeleton height={320} sx={{ borderRadius: 1 }} variant="rectangular" />
+        <Skeleton height={320} sx={{ borderRadius: 1 }} variant="rectangular" />
+      </Box>
+    );
+  }
+
+  return (
+    <Box
+      sx={{
+        display: "grid",
+        gap: 2,
+        gridTemplateColumns: { xs: "1fr", lg: "repeat(2, minmax(0, 1fr))" },
+      }}
+    >
+      <Card>
+        <CardContent>
+          <Stack spacing={2}>
+            <Box>
+              <Typography variant="h3">{t(tokens.dashboard.expenseDistributionTitle)}</Typography>
+              <Typography color="text.secondary" variant="body2">
+                {t(tokens.dashboard.expenseDistributionSubtitle)}
+              </Typography>
+            </Box>
+            {spentData.length === 0 ? (
+              <Alert severity="info">{t(tokens.dashboard.comparisonEmpty)}</Alert>
+            ) : (
+              <Box sx={{ height: 260 }}>
+                <ResponsiveContainer height="100%" width="100%">
+                  <PieChart>
+                    <Pie
+                      cx="50%"
+                      cy="50%"
+                      data={spentData}
+                      dataKey="value"
+                      innerRadius={62}
+                      nameKey="name"
+                      outerRadius={96}
+                      paddingAngle={2}
+                    >
+                      {spentData.map((entry) => (
+                        <Cell fill={entry.color} key={entry.name} />
+                      ))}
+                    </Pie>
+                    <RechartsTooltip
+                      formatter={(value) => centsToCurrency(Number(value))}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </Box>
+            )}
+          </Stack>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
+          <Stack spacing={2}>
+            <Box>
+              <Typography variant="h3">{t(tokens.dashboard.expenseLimitTitle)}</Typography>
+              <Typography color="text.secondary" variant="body2">
+                {t(tokens.dashboard.expenseLimitSubtitle)}
+              </Typography>
+            </Box>
+            <Box sx={{ height: 260 }}>
+              <ResponsiveContainer height="100%" width="100%">
+                <BarChart data={usageData} margin={{ bottom: 18, left: -24, right: 8, top: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis
+                    dataKey="name"
+                    interval={0}
+                    tick={{ fontSize: 11 }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(value) => `${value}%`}
+                    tickLine={false}
+                  />
+                  <RechartsTooltip formatter={(value) => `${value}%`} />
+                  <Bar dataKey="usage" radius={[6, 6, 0, 0]}>
+                    {usageData.map((entry) => (
+                      <Cell fill={entry.color} key={entry.name} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </Box>
+          </Stack>
+        </CardContent>
+      </Card>
+    </Box>
+  );
+}
+
 type ThemeSummaryCardProps = {
   onOpen: () => void;
   summary: ThemeSummary;
@@ -1575,9 +1754,13 @@ function ThemeSummaryCard({ onOpen, summary }: ThemeSummaryCardProps) {
     summary.recommended_cents > 0
       ? Math.min((summary.total_cents / summary.recommended_cents) * 100, 100)
       : 0;
-  const isOverRecommended =
-    summary.recommended_cents > 0 && summary.total_cents > summary.recommended_cents;
-  const isUnexpectedTheme = summary.sort_order === 4;
+  const health = getExpenseHealth(summary);
+  const healthColors = expenseHealthColors[health];
+  const healthLabel = {
+    critical: t(tokens.dashboard.expenseStatusCritical),
+    ok: t(tokens.dashboard.expenseStatusOk),
+    over: t(tokens.dashboard.expenseStatusOver),
+  }[health];
 
   return (
     <Card
@@ -1591,6 +1774,9 @@ function ThemeSummaryCard({ onOpen, summary }: ThemeSummaryCardProps) {
         }
       }}
       sx={{
+        borderLeft: "4px solid",
+        borderLeftColor: healthColors.border,
+        bgcolor: healthColors.soft,
         cursor: "pointer",
         transition: "transform 160ms ease, box-shadow 160ms ease",
         "&:hover": {
@@ -1609,10 +1795,14 @@ function ThemeSummaryCard({ onOpen, summary }: ThemeSummaryCardProps) {
               </Typography>
             </Box>
             <Chip
-              color={isUnexpectedTheme ? "error" : "warning"}
-              label={isUnexpectedTheme ? t(tokens.dashboard.unexpected) : t(tokens.dashboard.planned)}
+              label={healthLabel}
               size="small"
-              sx={{ flexShrink: 0 }}
+              sx={{
+                bgcolor: healthColors.main,
+                color: "common.white",
+                flexShrink: 0,
+                fontWeight: 800,
+              }}
             />
           </Stack>
 
@@ -1620,13 +1810,16 @@ function ThemeSummaryCard({ onOpen, summary }: ThemeSummaryCardProps) {
             <Typography color="text.secondary" variant="body2">
               {t(tokens.dashboard.spent)}
             </Typography>
-            <Typography color={isUnexpectedTheme ? "error.main" : "warning.main"} variant="h2">
+            <Typography color={healthColors.main} variant="h2">
               {centsToCurrency(summary.total_cents)}
             </Typography>
           </Box>
 
           <LinearProgress
-            color={isOverRecommended ? "error" : "primary"}
+            sx={{
+              bgcolor: "rgba(15, 23, 42, 0.12)",
+              "& .MuiLinearProgress-bar": { bgcolor: healthColors.main },
+            }}
             value={progress}
             variant="determinate"
           />
