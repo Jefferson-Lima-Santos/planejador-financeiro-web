@@ -1622,12 +1622,14 @@ type ExpenseChartsSectionProps = {
 
 function ExpenseChartsSection({ isLoading, themeSummaries }: ExpenseChartsSectionProps) {
   const { t } = useTranslation();
+  const totalSpent = themeSummaries.reduce((sum, summary) => sum + summary.total_cents, 0);
   const spentData = themeSummaries
     .filter((summary) => summary.total_cents > 0)
     .map((summary) => ({
       color: expenseHealthColors[getExpenseHealth(summary)].main,
       name: summary.name,
       value: summary.total_cents,
+      percentage: totalSpent > 0 ? Math.round((summary.total_cents / totalSpent) * 100) : 0,
     }));
   const usageData = themeSummaries.map((summary) => ({
     color: expenseHealthColors[getExpenseHealth(summary)].main,
@@ -1675,28 +1677,80 @@ function ExpenseChartsSection({ isLoading, themeSummaries }: ExpenseChartsSectio
             {spentData.length === 0 ? (
               <Alert severity="info">{t(tokens.dashboard.comparisonEmpty)}</Alert>
             ) : (
-              <Box sx={{ height: 260 }}>
-                <ResponsiveContainer height="100%" width="100%">
-                  <PieChart>
-                    <Pie
-                      cx="50%"
-                      cy="50%"
-                      data={spentData}
-                      dataKey="value"
-                      innerRadius={62}
-                      nameKey="name"
-                      outerRadius={96}
-                      paddingAngle={2}
+              <Box
+                sx={{
+                  alignItems: "center",
+                  display: "grid",
+                  gap: 2,
+                  gridTemplateColumns: { xs: "1fr", md: "minmax(220px, 0.85fr) 1fr" },
+                }}
+              >
+                <Box sx={{ height: 260, minWidth: 0 }}>
+                  <ResponsiveContainer height="100%" width="100%">
+                    <PieChart>
+                      <Pie
+                        cx="50%"
+                        cy="50%"
+                        data={spentData}
+                        dataKey="value"
+                        innerRadius={62}
+                        nameKey="name"
+                        outerRadius={96}
+                        paddingAngle={2}
+                      >
+                        {spentData.map((entry) => (
+                          <Cell fill={entry.color} key={entry.name} />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip
+                        formatter={(value, _name, item) => {
+                          const payload = item.payload as { percentage?: number };
+
+                          return [
+                            `${centsToCurrency(Number(value))} (${payload.percentage ?? 0}%)`,
+                            t(tokens.dashboard.themeSpent),
+                          ];
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </Box>
+                <Stack spacing={1.25}>
+                  {spentData.map((entry) => (
+                    <Stack
+                      alignItems="center"
+                      direction="row"
+                      key={entry.name}
+                      spacing={1}
+                      sx={{
+                        borderBottom: "1px solid",
+                        borderColor: "divider",
+                        pb: 1,
+                      }}
                     >
-                      {spentData.map((entry) => (
-                        <Cell fill={entry.color} key={entry.name} />
-                      ))}
-                    </Pie>
-                    <RechartsTooltip
-                      formatter={(value) => centsToCurrency(Number(value))}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+                      <Box
+                        sx={{
+                          bgcolor: entry.color,
+                          borderRadius: "50%",
+                          flexShrink: 0,
+                          height: 10,
+                          width: 10,
+                        }}
+                      />
+                      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                        <Typography fontWeight={800} noWrap variant="body2">
+                          {entry.name}
+                        </Typography>
+                        <Typography color="text.secondary" variant="caption">
+                          {entry.percentage}% {t(tokens.dashboard.themeSpent).toLowerCase()}
+                        </Typography>
+                      </Box>
+                      <Typography fontWeight={800} variant="body2">
+                        {centsToCurrency(entry.value)}
+                      </Typography>
+                    </Stack>
+                  ))}
+                </Stack>
               </Box>
             )}
           </Stack>
