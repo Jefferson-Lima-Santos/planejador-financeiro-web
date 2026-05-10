@@ -1218,10 +1218,10 @@ function HeroSection({
         >
           <Box>
             <Typography fontWeight={700} sx={{ opacity: 0.82 }} variant="body2">
-              {t(tokens.dashboard.financialView)}
+              {t(tokens.dashboard.financialOverview)}
             </Typography>
             <Typography sx={{ mt: 0.5 }} variant="h1">
-              {t(tokens.dashboard.monthlyBudget)}
+              {t(tokens.dashboard.monthBudget)}
             </Typography>
             <Typography sx={{ mt: 1, opacity: 0.88 }} variant="h3">
               {currentMonth.format("MMMM [de] YYYY")}
@@ -1268,7 +1268,7 @@ function HeroSection({
             {isCurrentMonth ? (
               <Chip
                 color="default"
-                label={t(tokens.dashboard.currentMonthHint)}
+                label={t(tokens.dashboard.currentMonthBadge)}
                 sx={{
                   alignSelf: { xs: "stretch", sm: "flex-end" },
                   bgcolor: "rgba(255, 255, 255, 0.18)",
@@ -1346,18 +1346,18 @@ function SummarySection({
       >
         <SummaryActionCard
           actionLabel={t(tokens.common.manage)}
-          detail={t(tokens.dashboard.activeEntriesCount, { count: activeIncomeCount })}
+          detail={t(tokens.dashboard.incomeActiveCount, { count: activeIncomeCount })}
           isLoading={isLoading}
-          label={t(tokens.dashboard.monthIncome)}
+          label={t(tokens.dashboard.income)}
           onAction={onOpenIncome}
           value={centsToCurrency(totals.income)}
           valueColor="text.primary"
         />
         <SummaryActionCard
           actionLabel={t(tokens.common.manage)}
-          detail={t(tokens.dashboard.expensesShortcut)}
+          detail={t(tokens.dashboard.expensesByThemeSubtitle)}
           isLoading={isLoading}
-          label={t(tokens.dashboard.totalSpent)}
+          label={t(tokens.dashboard.spent)}
           onAction={onScrollToExpenses}
           value={centsToCurrency(totals.spent)}
           valueColor={totals.spent > totals.income ? "error.main" : "text.primary"}
@@ -1462,9 +1462,9 @@ function MonthlyDataSection({
         {isLoading ? (
           <Skeleton height={48} sx={{ borderRadius: 2 }} variant="rectangular" />
         ) : totals.balance < 0 ? (
-          <Alert severity="error">{t(tokens.dashboard.overBudget)}</Alert>
+          <Alert severity="error">{t(tokens.dashboard.statusOver)}</Alert>
         ) : (
-          <Alert severity="success">{t(tokens.dashboard.insideBudget)}</Alert>
+          <Alert severity="success">{t(tokens.dashboard.statusOk)}</Alert>
         )}
 
         <GoalsSection goals={goals} isLoading={isLoading} />
@@ -1498,9 +1498,9 @@ const ExpensesSection = forwardRef<HTMLDivElement, ExpensesSectionProps>(functio
           spacing={1.5}
         >
           <Box>
-            <Typography variant="h2">{t(tokens.dashboard.expensesTitle)}</Typography>
+            <Typography variant="h2">{t(tokens.dashboard.expensesByTheme)}</Typography>
             <Typography color="text.secondary" variant="body2">
-              {t(tokens.dashboard.expensesSubtitle)}
+              {t(tokens.dashboard.expensesByThemeSubtitle)}
             </Typography>
           </Box>
           <Button
@@ -1546,7 +1546,9 @@ function ThemeSummaryCard({ onOpen, summary }: ThemeSummaryCardProps) {
     summary.recommended_cents > 0
       ? Math.min((summary.total_cents / summary.recommended_cents) * 100, 100)
       : 0;
-  const isOverRecommended = summary.recommended_cents > 0 && summary.total_cents > summary.recommended_cents;
+  const isOverRecommended =
+    summary.recommended_cents > 0 && summary.total_cents > summary.recommended_cents;
+  const isUnexpectedTheme = summary.sort_order === 4;
 
   return (
     <Card
@@ -1574,12 +1576,12 @@ function ThemeSummaryCard({ onOpen, summary }: ThemeSummaryCardProps) {
             <Box sx={{ minWidth: 0 }}>
               <Typography fontWeight={800}>{summary.name}</Typography>
               <Typography color="text.secondary" variant="body2">
-                {basisPointsToPercentage(summary.default_percentage_bp)} {t(tokens.dashboard.recommended)}
+                {basisPointsToPercentage(summary.default_percentage_bp)} {t(tokens.dashboard.themeRecommended)}
               </Typography>
             </Box>
             <Chip
-              color={summary.is_fixed ? "warning" : "error"}
-              label={summary.is_fixed ? t(tokens.dashboard.planned) : t(tokens.dashboard.unexpected)}
+              color={isUnexpectedTheme ? "error" : "warning"}
+              label={isUnexpectedTheme ? t(tokens.dashboard.unexpected) : t(tokens.dashboard.planned)}
               size="small"
               sx={{ flexShrink: 0 }}
             />
@@ -1589,7 +1591,7 @@ function ThemeSummaryCard({ onOpen, summary }: ThemeSummaryCardProps) {
             <Typography color="text.secondary" variant="body2">
               {t(tokens.dashboard.spent)}
             </Typography>
-            <Typography color={summary.is_fixed ? "warning.main" : "error.main"} variant="h2">
+            <Typography color={isUnexpectedTheme ? "error.main" : "warning.main"} variant="h2">
               {centsToCurrency(summary.total_cents)}
             </Typography>
           </Box>
@@ -1605,7 +1607,7 @@ function ThemeSummaryCard({ onOpen, summary }: ThemeSummaryCardProps) {
               {basisPointsToPercentage(summary.spent_percentage_bp)}
             </Typography>
             <Typography color="text.secondary" variant="caption">
-              {t(tokens.dashboard.recommendedValue)} {centsToCurrency(summary.recommended_cents)}
+              {t(tokens.dashboard.themeRecommended)} {centsToCurrency(summary.recommended_cents)}
             </Typography>
           </Stack>
         </Stack>
