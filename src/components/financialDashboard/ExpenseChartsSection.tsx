@@ -174,9 +174,17 @@ export const ExpenseChartsSection = ({
             </Box>
             <Box sx={{ height: 260 }}>
               <ResponsiveContainer height="100%" width="100%">
-                <BarChart data={usageData} margin={{ bottom: 18, left: -24, right: 8, top: 8 }}>
+                <BarChart data={usageData} margin={{ bottom: 54, left: -24, right: 8, top: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" interval={0} tick={{ fontSize: 11 }} tickLine={false} />
+                  <XAxis
+                    angle={-28}
+                    dataKey="name"
+                    height={62}
+                    interval={0}
+                    textAnchor="end"
+                    tick={{ fontSize: 11 }}
+                    tickLine={false}
+                  />
                   <YAxis
                     tick={{ fontSize: 11 }}
                     tickFormatter={(value) => `${value}%`}
