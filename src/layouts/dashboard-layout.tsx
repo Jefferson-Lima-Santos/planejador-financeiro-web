@@ -16,6 +16,7 @@ import { useRouter } from "next/router";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { LanguageSwitch } from "@/components/language-switch";
+import { ThemeSwitch } from "@/components/theme-switch";
 import { useAuth } from "@/contexts/auth-context";
 import { tokens } from "@/locales/tokens";
 
@@ -110,6 +111,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             spacing={{ xs: 1, sm: 2 }}
             sx={{ flexShrink: 0 }}
           >
+            <ThemeSwitch />
             <LanguageSwitch />
             <Stack alignItems="center" direction="row" spacing={1}>
               <Avatar sx={{ height: { xs: 30, sm: 32 }, width: { xs: 30, sm: 32 } }}>

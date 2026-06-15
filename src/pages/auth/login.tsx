@@ -27,6 +27,7 @@ import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { AppTextField } from "@/components/form-fields";
 import { LanguageSwitch } from "@/components/language-switch";
+import { ThemeSwitch } from "@/components/theme-switch";
 import { isSupabaseConfigured } from "@/config";
 import { useAuth } from "@/contexts/auth-context";
 import { tokens } from "@/locales/tokens";
@@ -168,8 +169,10 @@ export default function LoginPage() {
       <Box
         sx={{
           alignItems: "center",
-          backgroundImage:
-            "linear-gradient(110deg, rgba(7, 17, 32, 0.88), rgba(15, 23, 42, 0.58) 44%, rgba(37, 99, 235, 0.18)), url('/assets/auth-background.jpg')",
+          backgroundImage: (theme) =>
+            theme.palette.mode === "dark"
+              ? "linear-gradient(110deg, rgba(2, 6, 23, 0.94), rgba(7, 17, 32, 0.76) 44%, rgba(37, 99, 235, 0.22)), url('/assets/auth-background.jpg')"
+              : "linear-gradient(110deg, rgba(7, 17, 32, 0.88), rgba(15, 23, 42, 0.58) 44%, rgba(37, 99, 235, 0.18)), url('/assets/auth-background.jpg')",
           backgroundPosition: "center",
           backgroundSize: "cover",
           display: "flex",
@@ -180,7 +183,10 @@ export default function LoginPage() {
         }}
       >
         <Box sx={{ position: "absolute", right: 24, top: 24, zIndex: 2 }}>
-          <LanguageSwitch />
+          <Stack direction="row" spacing={1}>
+            <ThemeSwitch />
+            <LanguageSwitch />
+          </Stack>
         </Box>
 
         <Container maxWidth="lg">
@@ -232,9 +238,18 @@ export default function LoginPage() {
               sx={{
                 animation: "auth-card-in 420ms ease both",
                 backdropFilter: "blur(18px)",
-                bgcolor: "rgba(255, 255, 255, 0.94)",
-                border: "1px solid rgba(255, 255, 255, 0.64)",
-                boxShadow: "0 30px 90px rgba(15, 23, 42, 0.34)",
+                bgcolor: (theme) =>
+                  theme.palette.mode === "dark"
+                    ? "rgba(15, 27, 45, 0.88)"
+                    : "rgba(255, 255, 255, 0.94)",
+                border: (theme) =>
+                  theme.palette.mode === "dark"
+                    ? "1px solid rgba(96, 165, 250, 0.18)"
+                    : "1px solid rgba(255, 255, 255, 0.64)",
+                boxShadow: (theme) =>
+                  theme.palette.mode === "dark"
+                    ? "0 30px 90px rgba(2, 6, 23, 0.52)"
+                    : "0 30px 90px rgba(15, 23, 42, 0.34)",
               }}
             >
               <CardContent sx={{ p: { xs: 3, sm: 5 } }}>

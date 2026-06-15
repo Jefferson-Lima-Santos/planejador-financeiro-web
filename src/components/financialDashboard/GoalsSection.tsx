@@ -14,6 +14,7 @@ import {
   Typography,
 } from "@mui/material";
 import { EditOutlined, FlagOutlined } from "@mui/icons-material";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { tokens } from "@/locales/tokens";
 import type { Goal, GoalInvestment } from "@/types/finance";
@@ -34,7 +35,7 @@ type GoalsSectionProps = {
 
 const getInvestmentRateLabel = (
   investment: GoalInvestment,
-  translate: (key: string) => string
+  translate: TFunction
 ) => {
   const rate = (investment.return_rate_basis_points / 100).toLocaleString("pt-BR", {
     maximumFractionDigits: 2,
@@ -48,7 +49,7 @@ const getInvestmentRateLabel = (
   return `${rate}% ${periodLabel.toLowerCase()}`;
 };
 
-const getProjectionAlertProps = (goal: Goal, translate: (key: string, options?: object) => string) => {
+const getProjectionAlertProps = (goal: Goal, translate: TFunction) => {
   switch (goal.target_status) {
     case "on_track":
       return {

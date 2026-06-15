@@ -171,7 +171,8 @@ export type AuditLogTableName =
   | "recurring_entries"
   | "goals"
   | "goal_investments"
-  | "goal_investment_contributions";
+  | "goal_investment_contributions"
+  | "user_preferences";
 
 export type AuditLog = {
   id: string;

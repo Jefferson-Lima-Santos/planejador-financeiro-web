@@ -19,12 +19,16 @@ export const tokens = {
     optional: "common.optional",
     restore: "common.restore",
     save: "common.save",
+    themeChanged: "common.themeChanged",
     value: "common.value",
   },
   layout: {
     language: "layout.language",
     logout: "layout.logout",
     monthlyControl: "layout.monthlyControl",
+    theme: "layout.theme",
+    themeDark: "layout.themeDark",
+    themeLight: "layout.themeLight",
   },
   auth: {
     createAccount: "auth.createAccount",

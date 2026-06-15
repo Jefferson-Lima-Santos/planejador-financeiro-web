@@ -9,6 +9,18 @@ create table if not exists public.profiles (
   deleted_at timestamptz
 );
 
+create table if not exists public.user_preferences (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  preference_key text not null,
+  value_json jsonb not null default 'null'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz
+);
+
+create unique index if not exists idx_user_preferences_user_key
+  on public.user_preferences(user_id, preference_key);
+
 create table if not exists public.budget_months (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
@@ -184,6 +196,7 @@ create index if not exists idx_audit_logs_record
   on public.audit_logs(table_name, record_id, created_at desc);
 
 alter table public.profiles enable row level security;
+alter table public.user_preferences enable row level security;
 alter table public.budget_months enable row level security;
 alter table public.monthly_income_entries enable row level security;
 alter table public.budget_themes enable row level security;
@@ -257,6 +270,12 @@ create policy "profiles_update_own"
   on public.profiles for update
   using (auth.uid() = id)
   with check (auth.uid() = id);
+
+drop policy if exists "user_preferences_manage_own" on public.user_preferences;
+create policy "user_preferences_manage_own"
+  on public.user_preferences for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
 
 drop policy if exists "budget_months_manage_own" on public.budget_months;
 create policy "budget_months_manage_own"
@@ -431,6 +450,11 @@ $$;
 drop trigger if exists audit_budget_months on public.budget_months;
 create trigger audit_budget_months
   after insert or update or delete on public.budget_months
+  for each row execute function public.audit_row_changes();
+
+drop trigger if exists audit_user_preferences on public.user_preferences;
+create trigger audit_user_preferences
+  after insert or update or delete on public.user_preferences
   for each row execute function public.audit_row_changes();
 
 drop trigger if exists audit_monthly_income_entries on public.monthly_income_entries;

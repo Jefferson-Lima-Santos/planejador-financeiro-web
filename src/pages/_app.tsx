@@ -2,20 +2,19 @@ import "@/styles/globals.css";
 import "@/locales/i18n";
 import type { AppProps } from "next/app";
 import Head from "next/head";
-import { CssBaseline, ThemeProvider } from "@mui/material";
 import { LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { Toaster } from "react-hot-toast";
 import { RecoilRoot } from "recoil";
+import { AppThemeProvider } from "@/components/app-theme-provider";
 import { AuthProvider } from "@/contexts/auth-context";
-import { theme } from "@/theme";
 
 export default function App({ Component, pageProps }: AppProps) {
   return (
     <RecoilRoot>
-      <ThemeProvider theme={theme}>
-        <LocalizationProvider dateAdapter={AdapterDayjs}>
-          <AuthProvider>
+      <LocalizationProvider dateAdapter={AdapterDayjs}>
+        <AuthProvider>
+          <AppThemeProvider>
             <Head>
               <title>Planejador Financeiro</title>
               <meta
@@ -27,12 +26,11 @@ export default function App({ Component, pageProps }: AppProps) {
                 content="initial-scale=1, width=device-width"
               />
             </Head>
-            <CssBaseline />
             <Component {...pageProps} />
             <Toaster position="top-right" />
-          </AuthProvider>
-        </LocalizationProvider>
-      </ThemeProvider>
+          </AppThemeProvider>
+        </AuthProvider>
+      </LocalizationProvider>
     </RecoilRoot>
   );
 }
