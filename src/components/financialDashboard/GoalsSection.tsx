@@ -13,6 +13,7 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import { EditOutlined, FlagOutlined } from "@mui/icons-material";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
@@ -50,24 +51,47 @@ const getInvestmentRateLabel = (
 };
 
 const getProjectionAlertProps = (goal: Goal, translate: TFunction) => {
+  const projectedRatio =
+    goal.target_value_cents > 0 && typeof goal.projected_value_cents === "number"
+      ? goal.projected_value_cents / goal.target_value_cents
+      : null;
+
   switch (goal.target_status) {
     case "on_track":
       return {
+        accentColor: "success.main",
+        accentSoft: (themeMode: "light" | "dark") =>
+          alpha(themeMode === "dark" ? "#22c55e" : "#15803d", themeMode === "dark" ? 0.16 : 0.08),
         message: translate(tokens.dashboard.goalProjectionOnTrack),
         severity: "success" as const,
       };
     case "needs_more":
       return {
+        accentColor:
+          projectedRatio !== null && projectedRatio < 0.75 ? "error.main" : "warning.main",
+        accentSoft: (themeMode: "light" | "dark") =>
+          projectedRatio !== null && projectedRatio < 0.75
+            ? alpha(themeMode === "dark" ? "#f87171" : "#b91c1c", themeMode === "dark" ? 0.16 : 0.08)
+            : alpha(themeMode === "dark" ? "#fbbf24" : "#b45309", themeMode === "dark" ? 0.16 : 0.08),
         message: translate(tokens.dashboard.goalProjectionNeedsMore),
-        severity: "warning" as const,
+        severity:
+          projectedRatio !== null && projectedRatio < 0.75
+            ? ("error" as const)
+            : ("warning" as const),
       };
     case "expired":
       return {
+        accentColor: "error.main",
+        accentSoft: (themeMode: "light" | "dark") =>
+          alpha(themeMode === "dark" ? "#f87171" : "#b91c1c", themeMode === "dark" ? 0.16 : 0.08),
         message: translate(tokens.dashboard.goalProjectionExpired),
         severity: "error" as const,
       };
     default:
       return {
+        accentColor: "info.main",
+        accentSoft: (themeMode: "light" | "dark") =>
+          alpha(themeMode === "dark" ? "#60a5fa" : "#2563eb", themeMode === "dark" ? 0.16 : 0.08),
         message: translate(tokens.dashboard.goalProjectionMissingDate),
         severity: "info" as const,
       };
@@ -290,15 +314,16 @@ export const GoalsSection = ({
 
                             <Box
                               sx={{
-                                bgcolor: "rgba(37, 99, 235, 0.08)",
+                                bgcolor: (theme) =>
+                                  alertProps.accentSoft(theme.palette.mode),
                                 border: "1px solid",
-                                borderColor: "primary.light",
+                                borderColor: alertProps.accentColor,
                                 borderRadius: 2,
                                 p: 1.5,
                               }}
                             >
                               <Typography
-                                color="primary.main"
+                                color={alertProps.accentColor}
                                 fontWeight={800}
                                 variant="h3"
                               >
