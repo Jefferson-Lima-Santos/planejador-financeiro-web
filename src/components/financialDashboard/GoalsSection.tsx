@@ -153,6 +153,7 @@ export const GoalsSection = ({
           ) : (
             <Stack spacing={1.5}>
               {goals.map((goal) => {
+                const monthsToTarget = goal.months_to_target ?? null;
                 const progress =
                   goal.target_value_cents > 0
                     ? Math.min(((goal.total_saved_cents ?? goal.current_value_cents) /
@@ -193,11 +194,11 @@ export const GoalsSection = ({
                                   : t(tokens.dashboard.goalProjectionMissingDate)}
                                 size="small"
                               />
-                              {goal.months_to_target !== null &&
-                                goal.months_to_target > 0 && (
+                              {monthsToTarget !== null &&
+                                monthsToTarget > 0 && (
                                   <Chip
                                     color="primary"
-                                    label={getRemainingTimeLabel(goal.months_to_target)}
+                                    label={getRemainingTimeLabel(monthsToTarget)}
                                     size="small"
                                     variant="outlined"
                                   />
