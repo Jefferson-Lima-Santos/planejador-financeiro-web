@@ -30,6 +30,7 @@ export type MonthlyThemeEntry = {
   notes: string | null;
   yield_percentage_bp: number;
   goal_id: string | null;
+  goal_investment_id: string | null;
   change_reason: string | null;
   created_at: string;
   updated_at: string | null;
@@ -75,6 +76,56 @@ export type Goal = {
   created_at: string;
   updated_at: string | null;
   deleted_at: string | null;
+  investments?: GoalInvestment[];
+  investment_total_cents?: number;
+  linked_savings_cents?: number;
+  manual_current_value_cents?: number;
+  months_to_target?: number | null;
+  projected_value_cents?: number;
+  required_monthly_contribution_cents?: number | null;
+  required_additional_monthly_contribution_cents?: number | null;
+  target_status?: "on_track" | "needs_more" | "no_target_date" | "expired";
+  total_saved_cents?: number;
+};
+
+export type GoalInvestment = {
+  id: string;
+  user_id: string;
+  goal_id: string;
+  name: string;
+  current_value_cents: number;
+  monthly_contribution_cents: number;
+  return_rate_basis_points: number;
+  return_rate_period: "monthly" | "annual";
+  created_at: string;
+  updated_at: string | null;
+  deleted_at: string | null;
+  contribution?: GoalInvestmentContribution | null;
+};
+
+export type GoalInvestmentContribution = {
+  id: string;
+  user_id: string;
+  budget_month_id: string;
+  goal_id: string;
+  goal_investment_id: string;
+  planned_amount_cents: number;
+  confirmed_amount_cents: number;
+  status: "pending" | "confirmed" | "skipped";
+  monthly_theme_entry_id: string | null;
+  confirmed_at: string | null;
+  created_at: string;
+  updated_at: string | null;
+  deleted_at: string | null;
+};
+
+export type GoalInvestmentDraft = {
+  id?: string;
+  currentValueCents: number;
+  monthlyContributionCents: number;
+  name: string;
+  returnRateBasisPoints: number;
+  returnRatePeriod: "monthly" | "annual";
 };
 
 export type ThemeSummary = BudgetTheme & {
@@ -118,7 +169,9 @@ export type AuditLogTableName =
   | "monthly_income_entries"
   | "monthly_theme_entries"
   | "recurring_entries"
-  | "goals";
+  | "goals"
+  | "goal_investments"
+  | "goal_investment_contributions";
 
 export type AuditLog = {
   id: string;

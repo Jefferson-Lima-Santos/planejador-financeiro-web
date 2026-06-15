@@ -53,10 +53,13 @@ import { useAuth } from "@/contexts/auth-context";
 import { authTokenRefreshTickAtom } from "@/state/atoms/auth";
 import { tokens } from "@/locales/tokens";
 import {
+  createGoal,
   createEntry,
   createIncomeEntry,
   ensureBudgetMonth,
   getRecurringEntry,
+  listGoalInvestments,
+  listMonthGoalInvestmentContributions,
   listMonthGoals,
   listAuditLogsForRecord,
   listBudgetThemes,
@@ -66,8 +69,10 @@ import {
   materializeRecurringEntries,
   restoreIncomeEntry,
   restoreEntry,
+  saveGoalInvestmentContribution,
   softDeleteIncomeEntry,
   softDeleteEntry,
+  updateGoal,
   updateIncomeEntry,
   updateEntry,
 } from "@/lib/finance-repository";
@@ -77,6 +82,7 @@ import type {
   BudgetTheme,
   EntryFormValues,
   Goal,
+  GoalInvestment,
   MonthlyComparison,
   MonthlyIncomeEntry,
   MonthlyThemeEntry,
@@ -115,6 +121,41 @@ const emptyIncomeForm = (): EntryFormValues => ({
   goalId: "",
 });
 
+type GoalFormValues = {
+  currentValue: string;
+  investments: GoalInvestmentFormValues[];
+  name: string;
+  targetDate: string;
+  targetValue: string;
+};
+
+type GoalInvestmentFormValues = {
+  id?: string;
+  currentValue: string;
+  hasRecurringContribution: boolean;
+  monthlyContribution: string;
+  name: string;
+  returnRate: string;
+  returnRatePeriod: "monthly" | "annual";
+};
+
+const emptyGoalInvestmentForm = (): GoalInvestmentFormValues => ({
+  currentValue: "",
+  hasRecurringContribution: false,
+  monthlyContribution: "",
+  name: "",
+  returnRate: "",
+  returnRatePeriod: "annual",
+});
+
+const emptyGoalForm = (): GoalFormValues => ({
+  currentValue: "",
+  investments: [],
+  name: "",
+  targetDate: "",
+  targetValue: "",
+});
+
 const percentageInputToBasisPoints = (value: string): number => {
   const normalized = value.replace(",", ".").replace(/[^\d.]/g, "");
   const parsed = Number(normalized);
@@ -128,6 +169,172 @@ const percentageInputToBasisPoints = (value: string): number => {
 
 const basisPointsToInputValue = (value: number): string =>
   value > 0 ? (value / 100).toString().replace(".", ",") : "";
+
+const getMonthlyRateFromInvestment = (investment: GoalInvestment): number => {
+  const rate = investment.return_rate_basis_points / 10000;
+
+  if (rate <= 0) {
+    return 0;
+  }
+
+  if (investment.return_rate_period === "monthly") {
+    return rate;
+  }
+
+  return Math.pow(1 + rate, 1 / 12) - 1;
+};
+
+const getFutureValueFactor = (monthlyRate: number, months: number): number => {
+  if (months <= 0) {
+    return 0;
+  }
+
+  if (monthlyRate <= 0) {
+    return months;
+  }
+
+  return (Math.pow(1 + monthlyRate, months) - 1) / monthlyRate;
+};
+
+const getMonthsToTarget = (targetDate: string | null): number | null => {
+  if (!targetDate) {
+    return null;
+  }
+
+  const diffInMonths = dayjs(targetDate).endOf("day").diff(dayjs(), "month", true);
+
+  if (diffInMonths <= 0) {
+    return 0;
+  }
+
+  return Math.ceil(diffInMonths);
+};
+
+const buildGoalProjection = (
+  goal: Goal,
+  linkedSavingsCents: number,
+  investments: GoalInvestment[]
+): Goal => {
+  const manualCurrentValueCents = goal.current_value_cents;
+  const investmentTotalCents = investments.reduce(
+    (sum, investment) => sum + investment.current_value_cents,
+    0
+  );
+  const totalSavedCents =
+    manualCurrentValueCents + linkedSavingsCents + investmentTotalCents;
+  const monthsToTarget = getMonthsToTarget(goal.target_date);
+  const currentRecurringMonthlyCents = investments.reduce(
+    (sum, investment) => sum + investment.monthly_contribution_cents,
+    0
+  );
+
+  if (monthsToTarget === null) {
+    return {
+      ...goal,
+      current_value_cents: totalSavedCents,
+      investment_total_cents: investmentTotalCents,
+      investments,
+      linked_savings_cents: linkedSavingsCents,
+      manual_current_value_cents: manualCurrentValueCents,
+      months_to_target: null,
+      projected_value_cents: totalSavedCents,
+      required_additional_monthly_contribution_cents: null,
+      required_monthly_contribution_cents: null,
+      target_status: "no_target_date",
+      total_saved_cents: totalSavedCents,
+    };
+  }
+
+  if (monthsToTarget === 0) {
+    return {
+      ...goal,
+      current_value_cents: totalSavedCents,
+      investment_total_cents: investmentTotalCents,
+      investments,
+      linked_savings_cents: linkedSavingsCents,
+      manual_current_value_cents: manualCurrentValueCents,
+      months_to_target: 0,
+      projected_value_cents: totalSavedCents,
+      required_additional_monthly_contribution_cents:
+        totalSavedCents >= goal.target_value_cents ? 0 : null,
+      required_monthly_contribution_cents:
+        totalSavedCents >= goal.target_value_cents ? currentRecurringMonthlyCents : null,
+      target_status:
+        totalSavedCents >= goal.target_value_cents ? "on_track" : "expired",
+      total_saved_cents: totalSavedCents,
+    };
+  }
+
+  const projectedInvestmentsCents = investments.reduce((sum, investment) => {
+    const monthlyRate = getMonthlyRateFromInvestment(investment);
+    const futureValueFactor = getFutureValueFactor(monthlyRate, monthsToTarget);
+    const compoundedCurrent =
+      investment.current_value_cents * Math.pow(1 + monthlyRate, monthsToTarget);
+    const compoundedContributions =
+      investment.monthly_contribution_cents * futureValueFactor;
+
+    return sum + compoundedCurrent + compoundedContributions;
+  }, 0);
+
+  const projectedValueCents = Math.round(
+    manualCurrentValueCents + linkedSavingsCents + projectedInvestmentsCents
+  );
+
+  if (projectedValueCents >= goal.target_value_cents) {
+    return {
+      ...goal,
+      current_value_cents: totalSavedCents,
+      investment_total_cents: investmentTotalCents,
+      investments,
+      linked_savings_cents: linkedSavingsCents,
+      manual_current_value_cents: manualCurrentValueCents,
+      months_to_target: monthsToTarget,
+      projected_value_cents: projectedValueCents,
+      required_additional_monthly_contribution_cents: 0,
+      required_monthly_contribution_cents: currentRecurringMonthlyCents,
+      target_status: "on_track",
+      total_saved_cents: totalSavedCents,
+    };
+  }
+
+  const remainingGapCents = goal.target_value_cents - projectedValueCents;
+  const totalFutureValueFactor =
+    investments.length > 0
+      ? investments.reduce((sum, investment) => {
+          const monthlyRate = getMonthlyRateFromInvestment(investment);
+
+          return sum + getFutureValueFactor(monthlyRate, monthsToTarget);
+        }, 0)
+      : monthsToTarget;
+  const additionalMonthlyContributionCents =
+    totalFutureValueFactor > 0
+      ? Math.ceil(
+          remainingGapCents *
+            (investments.length > 0 ? investments.length : 1) /
+            totalFutureValueFactor
+        )
+      : null;
+  const requiredMonthlyContributionCents =
+    additionalMonthlyContributionCents === null
+      ? null
+      : currentRecurringMonthlyCents + additionalMonthlyContributionCents;
+
+  return {
+    ...goal,
+    current_value_cents: totalSavedCents,
+    investment_total_cents: investmentTotalCents,
+    investments,
+    linked_savings_cents: linkedSavingsCents,
+    manual_current_value_cents: manualCurrentValueCents,
+    months_to_target: monthsToTarget,
+    projected_value_cents: projectedValueCents,
+    required_additional_monthly_contribution_cents:
+      additionalMonthlyContributionCents,
+    required_monthly_contribution_cents: requiredMonthlyContributionCents,
+    target_status: "needs_more",
+    total_saved_cents: totalSavedCents,
+  };
+};
 
 const sortAuditLogs = (logs: AuditLog[]) =>
   [...logs].sort(
@@ -163,6 +370,9 @@ function FinancialDashboard() {
   const [entries, setEntries] = useState<MonthlyThemeEntry[]>([]);
   const [incomeEntries, setIncomeEntries] = useState<MonthlyIncomeEntry[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
+  const [goalDialogOpen, setGoalDialogOpen] = useState(false);
+  const [goalFormValues, setGoalFormValues] = useState<GoalFormValues>(emptyGoalForm());
   const [incomeDrawerOpen, setIncomeDrawerOpen] = useState(false);
   const [incomeDrawerTab, setIncomeDrawerTab] = useState<"active" | "deleted">("active");
   const [incomeFormValues, setIncomeFormValues] = useState(emptyIncomeForm());
@@ -189,6 +399,7 @@ function FinancialDashboard() {
     useState<MonthTransitionDirection>("next");
   const [monthTransitionPhase, setMonthTransitionPhase] =
     useState<MonthTransitionPhase>("idle");
+  const goalInvestmentsFormValues = goalFormValues.investments ?? [];
 
   const loadMonth = useCallback(async () => {
     if (!userId) {
@@ -215,13 +426,29 @@ function FinancialDashboard() {
         listMonthGoals(month.id),
         listMonthlyComparisons(currentMonth.year(), currentMonth.month() + 1),
       ]);
+      const [goalInvestments, goalContributions] = await Promise.all([
+        listGoalInvestments(goalRows.map((goal) => goal.id)),
+        listMonthGoalInvestmentContributions(month.id),
+      ]);
+      const goalsWithInvestments = goalRows.map((goal) => ({
+        ...goal,
+        investments: goalInvestments
+          .filter((investment) => investment.goal_id === goal.id)
+          .map((investment) => ({
+            ...investment,
+            contribution:
+              goalContributions.find(
+                (contribution) => contribution.goal_investment_id === investment.id
+              ) ?? null,
+          })),
+      }));
 
       setBudgetMonth(month);
       setComparisons(comparisonRows);
       setThemes(themeRows);
       setEntries(entryRows);
       setIncomeEntries(incomeRows);
-      setGoals(goalRows);
+      setGoals(goalsWithInvestments);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Erro ao carregar dados."
@@ -255,6 +482,97 @@ function FinancialDashboard() {
     };
   }, []);
 
+  const closeGoalDialog = () => {
+    setGoalDialogOpen(false);
+    setEditingGoal(null);
+    setGoalFormValues(emptyGoalForm());
+  };
+
+  const openCreateGoalDialog = () => {
+    setEditingGoal(null);
+    setGoalFormValues(emptyGoalForm());
+    setGoalDialogOpen(true);
+  };
+
+  const handleEditGoal = (goal: Goal) => {
+    setEditingGoal(goal);
+    setGoalFormValues({
+      currentValue: centsToInputValue(goal.manual_current_value_cents ?? goal.current_value_cents),
+      investments: (goal.investments ?? []).map((investment) => ({
+        id: investment.id,
+        currentValue: centsToInputValue(investment.current_value_cents),
+        hasRecurringContribution: investment.monthly_contribution_cents > 0,
+        monthlyContribution: centsToInputValue(investment.monthly_contribution_cents),
+        name: investment.name,
+        returnRate: basisPointsToInputValue(investment.return_rate_basis_points),
+        returnRatePeriod: investment.return_rate_period,
+      })),
+      name: goal.name,
+      targetDate: goal.target_date ?? "",
+      targetValue: centsToInputValue(goal.target_value_cents),
+    });
+    setGoalDialogOpen(true);
+  };
+
+  const handleAddGoalInvestment = () => {
+    setGoalFormValues((currentValues) => ({
+      ...currentValues,
+      investments: [...(currentValues.investments ?? []), emptyGoalInvestmentForm()],
+    }));
+  };
+
+  const handleRemoveGoalInvestment = (investmentIndex: number) => {
+    setGoalFormValues((currentValues) => ({
+      ...currentValues,
+      investments: (currentValues.investments ?? []).filter(
+        (_, index) => index !== investmentIndex
+      ),
+    }));
+  };
+
+  const handleGoalInvestmentChange = (
+    investmentIndex: number,
+    partialValues: Partial<GoalInvestmentFormValues>
+  ) => {
+    setGoalFormValues((currentValues) => ({
+      ...currentValues,
+      investments: (currentValues.investments ?? []).map((investment, index) =>
+        index === investmentIndex ? { ...investment, ...partialValues } : investment
+      ),
+    }));
+  };
+
+  const handleGoalContributionAction = async (
+    goal: Goal,
+    investment: GoalInvestment,
+    status: "confirmed" | "skipped"
+  ) => {
+    if (!budgetMonth || !user) {
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      await saveGoalInvestmentContribution({
+        budgetMonthId: budgetMonth.id,
+        confirmedAmountCents:
+          status === "confirmed" ? investment.monthly_contribution_cents : 0,
+        contributionDate: currentMonth.startOf("month").format("YYYY-MM-DD"),
+        goalId: goal.id,
+        goalInvestmentId: investment.id,
+        goalName: goal.name,
+        plannedAmountCents: investment.monthly_contribution_cents,
+        status,
+      });
+      await loadMonth();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao salvar aporte.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const activeEntries = useMemo(
     () => entries.filter((entry) => !entry.deleted_at),
     [entries]
@@ -276,10 +594,19 @@ function FinancialDashboard() {
   );
 
   const themeSummaries = useMemo<ThemeSummary[]>(() => {
+    const manualGoalBaseCents = goals.reduce(
+      (sum, goal) => sum + goal.current_value_cents,
+      0
+    );
+
     return themes.map((theme) => {
-      const total = activeEntries
+      const entryTotal = activeEntries
         .filter((entry) => entry.theme_id === theme.id)
         .reduce((sum, entry) => sum + entry.amount_cents, 0);
+      const total =
+        theme.target_behavior === "saving_goal"
+          ? entryTotal + manualGoalBaseCents
+          : entryTotal;
       const recommended = Math.round(
         (incomeTotalCents * theme.default_percentage_bp) / 10000
       );
@@ -293,7 +620,7 @@ function FinancialDashboard() {
         total_cents: total,
       };
     });
-  }, [activeEntries, incomeTotalCents, themes]);
+  }, [activeEntries, goals, incomeTotalCents, themes]);
 
   const goalsWithSavings = useMemo<Goal[]>(() => {
     return goals.map((goal) => {
@@ -301,10 +628,7 @@ function FinancialDashboard() {
         .filter((entry) => entry.goal_id === goal.id)
         .reduce((sum, entry) => sum + entry.amount_cents, 0);
 
-      return {
-        ...goal,
-        current_value_cents: goal.current_value_cents + linkedSavings,
-      };
+      return buildGoalProjection(goal, linkedSavings, goal.investments ?? []);
     });
   }, [activeEntries, goals]);
 
@@ -755,6 +1079,10 @@ function FinancialDashboard() {
           currentMonth={currentMonth}
           goals={goalsWithSavings}
           isLoading={isLoading}
+          onAddGoal={openCreateGoalDialog}
+          onContributionAction={handleGoalContributionAction}
+          onEditGoal={handleEditGoal}
+          isSaving={isSaving}
           totals={totals}
         />
 
@@ -811,6 +1139,305 @@ function FinancialDashboard() {
         open={incomeDrawerOpen}
         totalCents={incomeTotalCents}
       />
+
+      <Dialog
+        fullWidth
+        fullScreen={isMobile}
+        maxWidth="md"
+        onClose={closeGoalDialog}
+        open={goalDialogOpen}
+      >
+        <DialogTitle sx={{ pb: 1 }}>
+          <Stack alignItems="center" direction="row" spacing={1}>
+            <IconButton
+              aria-label={t(tokens.common.back)}
+              edge="start"
+              onClick={closeGoalDialog}
+              sx={{ display: { xs: "inline-flex", sm: "none" } }}
+            >
+              <ArrowBackIosNewOutlined fontSize="small" />
+            </IconButton>
+            <Typography sx={{ flexGrow: 1 }} variant="h3">
+              {editingGoal ? t(tokens.dashboard.editGoal) : t(tokens.dashboard.newGoal)}
+            </Typography>
+            <IconButton
+              aria-label={t(tokens.common.cancel)}
+              onClick={closeGoalDialog}
+              sx={{ display: { xs: "none", sm: "inline-flex" } }}
+            >
+              <CloseOutlined />
+            </IconButton>
+          </Stack>
+        </DialogTitle>
+        <DialogContent>
+          <Box
+            component="form"
+            onSubmit={async (event: FormEvent<HTMLFormElement>) => {
+              event.preventDefault();
+
+              if (!budgetMonth || !user) {
+                return;
+              }
+
+              setIsSaving(true);
+
+              try {
+                const goalPayload = {
+                  currentValueCents: currencyInputToCents(goalFormValues.currentValue),
+                  investments: goalInvestmentsFormValues.map((investment) => ({
+                    id: investment.id,
+                    currentValueCents: currencyInputToCents(investment.currentValue),
+                    monthlyContributionCents: investment.hasRecurringContribution
+                      ? currencyInputToCents(investment.monthlyContribution)
+                      : 0,
+                    name: investment.name,
+                    returnRateBasisPoints: percentageInputToBasisPoints(
+                      investment.returnRate
+                    ),
+                    returnRatePeriod: investment.returnRatePeriod,
+                  })),
+                  name: goalFormValues.name,
+                  targetDate: goalFormValues.targetDate || null,
+                  targetValueCents: currencyInputToCents(goalFormValues.targetValue),
+                  userId: user.id,
+                };
+
+                if (editingGoal) {
+                  await updateGoal({
+                    ...goalPayload,
+                    goalId: editingGoal.id,
+                  });
+                } else {
+                  await createGoal({
+                    ...goalPayload,
+                    budgetMonthId: budgetMonth.id,
+                  });
+                }
+                await loadMonth();
+                closeGoalDialog();
+                toast.success(
+                  t(editingGoal ? tokens.dashboard.goalUpdated : tokens.dashboard.goalAdded)
+                );
+              } catch (error) {
+                toast.error(
+                  error instanceof Error
+                    ? error.message
+                    : t(tokens.dashboard.saveGoalError)
+                );
+              } finally {
+                setIsSaving(false);
+              }
+            }}
+          >
+            <Stack spacing={2} sx={{ pt: 1 }}>
+              <AppTextField
+                autoFocus
+                fullWidth
+                label={t(tokens.dashboard.goalName)}
+                onChange={(event) =>
+                  setGoalFormValues({ ...goalFormValues, name: event.target.value })
+                }
+                required
+                value={goalFormValues.name}
+              />
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                <MoneyTextField
+                  label={t(tokens.dashboard.goalTargetValue)}
+                  onChange={(event) =>
+                    setGoalFormValues({ ...goalFormValues, targetValue: event })
+                  }
+                  required
+                  value={goalFormValues.targetValue}
+                />
+                <AppTextField
+                  fullWidth
+                  label={t(tokens.dashboard.goalTargetDate)}
+                  onChange={(event) =>
+                    setGoalFormValues({
+                      ...goalFormValues,
+                      targetDate: event.target.value,
+                    })
+                  }
+                  required
+                  type="date"
+                  value={goalFormValues.targetDate}
+                />
+              </Stack>
+              <MoneyTextField
+                helperText={t(tokens.dashboard.goalInitialValueHelp)}
+                label={t(tokens.dashboard.goalInitialValue)}
+                onChange={(event) =>
+                  setGoalFormValues({ ...goalFormValues, currentValue: event })
+                }
+                value={goalFormValues.currentValue}
+              />
+
+              <Divider />
+
+              <Stack spacing={1.5}>
+                <Stack
+                  alignItems={{ xs: "flex-start", sm: "center" }}
+                  direction={{ xs: "column", sm: "row" }}
+                  justifyContent="space-between"
+                  spacing={1}
+                >
+                  <Box>
+                    <Typography variant="h3">
+                      {t(tokens.dashboard.goalInvestmentsTitle)}
+                    </Typography>
+                    <Typography color="text.secondary" variant="body2">
+                      {t(tokens.dashboard.goalInvestmentsSubtitle)}
+                    </Typography>
+                  </Box>
+                  <Button
+                    onClick={handleAddGoalInvestment}
+                    startIcon={<AddOutlined />}
+                    variant="outlined"
+                  >
+                    {t(tokens.dashboard.addGoalInvestment)}
+                  </Button>
+                </Stack>
+
+                {goalInvestmentsFormValues.length === 0 ? (
+                  <Alert severity="info">{t(tokens.dashboard.goalNoInvestments)}</Alert>
+                ) : (
+                  <Stack spacing={2}>
+                    {goalInvestmentsFormValues.map((investment, investmentIndex) => (
+                      <Card key={`goal-investment-${investmentIndex}`} variant="outlined">
+                        <CardContent>
+                          <Stack spacing={2}>
+                            <Stack
+                              alignItems={{ xs: "flex-start", sm: "center" }}
+                              direction={{ xs: "column", sm: "row" }}
+                              justifyContent="space-between"
+                              spacing={1}
+                            >
+                              <Typography fontWeight={800}>
+                                {t(tokens.dashboard.goalInvestmentLabel, {
+                                  count: investmentIndex + 1,
+                                })}
+                              </Typography>
+                              <Button
+                                color="error"
+                                onClick={() => handleRemoveGoalInvestment(investmentIndex)}
+                                startIcon={<DeleteOutlineOutlined />}
+                              >
+                                {t(tokens.dashboard.goalRemoveInvestment)}
+                              </Button>
+                            </Stack>
+
+                            <AppTextField
+                              fullWidth
+                              label={t(tokens.dashboard.goalInvestmentName)}
+                              onChange={(event) =>
+                                handleGoalInvestmentChange(investmentIndex, {
+                                  name: event.target.value,
+                                })
+                              }
+                              required
+                              value={investment.name}
+                            />
+
+                            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                              <MoneyTextField
+                                label={t(tokens.dashboard.goalInvestmentCurrentValue)}
+                                onChange={(event) =>
+                                  handleGoalInvestmentChange(investmentIndex, {
+                                    currentValue: event,
+                                  })
+                                }
+                                value={investment.currentValue}
+                              />
+                              <AppTextField
+                                fullWidth
+                                label={t(tokens.dashboard.goalInvestmentReturn)}
+                                onChange={(event) =>
+                                  handleGoalInvestmentChange(investmentIndex, {
+                                    returnRate: event.target.value,
+                                  })
+                                }
+                                placeholder="0,00%"
+                                value={investment.returnRate}
+                              />
+                              <AppTextField
+                                fullWidth
+                                label={t(tokens.dashboard.goalInvestmentReturnPeriod)}
+                                onChange={(event) =>
+                                  handleGoalInvestmentChange(investmentIndex, {
+                                    returnRatePeriod: event.target.value as
+                                      | "monthly"
+                                      | "annual",
+                                  })
+                                }
+                                select
+                                SelectProps={{ native: true }}
+                                value={investment.returnRatePeriod}
+                              >
+                                <option value="monthly">
+                                  {t(tokens.dashboard.goalInvestmentReturnPeriodMonthly)}
+                                </option>
+                                <option value="annual">
+                                  {t(tokens.dashboard.goalInvestmentReturnPeriodAnnual)}
+                                </option>
+                              </AppTextField>
+                            </Stack>
+
+                            <FormControlLabel
+                              control={
+                                <Checkbox
+                                  checked={investment.hasRecurringContribution}
+                                  onChange={(event) =>
+                                    handleGoalInvestmentChange(investmentIndex, {
+                                      hasRecurringContribution: event.target.checked,
+                                      monthlyContribution: event.target.checked
+                                        ? investment.monthlyContribution
+                                        : "",
+                                    })
+                                  }
+                                />
+                              }
+                              label={t(tokens.dashboard.goalInvestmentRecurring)}
+                            />
+
+                            {investment.hasRecurringContribution && (
+                              <MoneyTextField
+                                helperText={t(
+                                  tokens.dashboard.goalInvestmentMonthlyContributionHelp
+                                )}
+                                label={t(
+                                  tokens.dashboard.goalInvestmentMonthlyContribution
+                                )}
+                                onChange={(event) =>
+                                  handleGoalInvestmentChange(investmentIndex, {
+                                    monthlyContribution: event,
+                                  })
+                                }
+                                value={investment.monthlyContribution}
+                              />
+                            )}
+                          </Stack>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </Stack>
+                )}
+              </Stack>
+
+              <Stack direction="row" justifyContent="flex-end" spacing={1}>
+                <Button onClick={closeGoalDialog}>{t(tokens.common.back)}</Button>
+                <Button
+                  disabled={isSaving}
+                  startIcon={<SaveOutlined />}
+                  type="submit"
+                  variant="contained"
+                >
+                  {t(tokens.common.save)}
+                </Button>
+              </Stack>
+            </Stack>
+          </Box>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         fullWidth

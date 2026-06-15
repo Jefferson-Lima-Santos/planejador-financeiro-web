@@ -5,6 +5,9 @@ import type {
   BudgetMonth,
   BudgetTheme,
   Goal,
+  GoalInvestmentContribution,
+  GoalInvestmentDraft,
+  GoalInvestment,
   MonthlyComparison,
   MonthlyIncomeEntry,
   MonthlyThemeEntry,
@@ -51,6 +54,29 @@ const getDateInMonth = (year: number, month: number, day: number): string => {
   const safeDayText = String(safeDay).padStart(2, "0");
 
   return `${year}-${safeMonth}-${safeDayText}`;
+};
+
+const getSavingGoalThemeId = async (): Promise<string> => {
+  const client = requireSupabase();
+
+  const { data, error } = await client
+    .from("budget_themes")
+    .select("id")
+    .eq("target_behavior", "saving_goal")
+    .is("deleted_at", null)
+    .order("sort_order", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data?.id) {
+    throw new Error("Tema de poupanca para o futuro nao encontrado.");
+  }
+
+  return data.id;
 };
 
 const isMonthInRange = (
@@ -295,6 +321,352 @@ export async function listMonthGoals(budgetMonthId: string): Promise<Goal[]> {
   }
 
   return (data ?? []) as Goal[];
+}
+
+type CreateGoalInput = {
+  budgetMonthId: string;
+  currentValueCents: number;
+  investments?: GoalInvestmentDraft[];
+  name: string;
+  targetDate: string | null;
+  targetValueCents: number;
+  userId: string;
+};
+
+export async function createGoal(input: CreateGoalInput): Promise<Goal> {
+  const client = requireSupabase();
+  const authenticatedUserId = await requireAuthenticatedUserId();
+
+  if (authenticatedUserId !== input.userId) {
+    throw new Error("Sua sessão expirou. Entre novamente para continuar.");
+  }
+
+  const { data, error } = await client
+    .from("goals")
+    .insert({
+      budget_month_id: input.budgetMonthId,
+      current_value_cents: input.currentValueCents,
+      name: input.name.trim(),
+      target_date: input.targetDate,
+      target_value_cents: input.targetValueCents,
+      user_id: authenticatedUserId,
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  if (input.investments?.length) {
+    const investmentsPayload = input.investments
+      .filter((investment) => investment.name.trim().length > 0)
+      .map((investment) => ({
+        current_value_cents: investment.currentValueCents,
+        goal_id: data.id,
+        monthly_contribution_cents: investment.monthlyContributionCents,
+        name: investment.name.trim(),
+        return_rate_basis_points: investment.returnRateBasisPoints,
+        return_rate_period: investment.returnRatePeriod,
+        user_id: authenticatedUserId,
+      }));
+
+    if (investmentsPayload.length > 0) {
+      const { error: investmentsError } = await client
+        .from("goal_investments")
+        .insert(investmentsPayload);
+
+      if (investmentsError) {
+        throw investmentsError;
+      }
+    }
+  }
+
+  return data as Goal;
+}
+
+type UpdateGoalInput = {
+  currentValueCents: number;
+  goalId: string;
+  investments?: GoalInvestmentDraft[];
+  name: string;
+  targetDate: string | null;
+  targetValueCents: number;
+  userId: string;
+};
+
+export async function updateGoal(input: UpdateGoalInput): Promise<Goal> {
+  const client = requireSupabase();
+  const authenticatedUserId = await requireAuthenticatedUserId();
+
+  if (authenticatedUserId !== input.userId) {
+    throw new Error("Sua sessao expirou. Entre novamente para continuar.");
+  }
+
+  const { data, error } = await client
+    .from("goals")
+    .update({
+      current_value_cents: input.currentValueCents,
+      name: input.name.trim(),
+      target_date: input.targetDate,
+      target_value_cents: input.targetValueCents,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.goalId)
+    .eq("user_id", authenticatedUserId)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  const activeDrafts =
+    input.investments?.filter((investment) => investment.name.trim().length > 0) ?? [];
+  const draftIds = activeDrafts
+    .map((investment) => investment.id)
+    .filter((value): value is string => Boolean(value));
+
+  const { error: softDeleteRemovedInvestmentsError } = await client
+    .from("goal_investments")
+    .update({
+      deleted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("goal_id", input.goalId)
+    .eq("user_id", authenticatedUserId)
+    .is("deleted_at", null)
+    .not(
+      "id",
+      "in",
+      draftIds.length > 0
+        ? `(${draftIds.map((id) => `"${id}"`).join(",")})`
+        : "(\"00000000-0000-0000-0000-000000000000\")"
+    );
+
+  if (softDeleteRemovedInvestmentsError) {
+    throw softDeleteRemovedInvestmentsError;
+  }
+
+  for (const investment of activeDrafts) {
+    if (investment.id) {
+      const { error: investmentUpdateError } = await client
+        .from("goal_investments")
+        .update({
+          current_value_cents: investment.currentValueCents,
+          deleted_at: null,
+          monthly_contribution_cents: investment.monthlyContributionCents,
+          name: investment.name.trim(),
+          return_rate_basis_points: investment.returnRateBasisPoints,
+          return_rate_period: investment.returnRatePeriod,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", investment.id)
+        .eq("user_id", authenticatedUserId);
+
+      if (investmentUpdateError) {
+        throw investmentUpdateError;
+      }
+
+      continue;
+    }
+
+    const { error: investmentInsertError } = await client.from("goal_investments").insert({
+      current_value_cents: investment.currentValueCents,
+      goal_id: input.goalId,
+      monthly_contribution_cents: investment.monthlyContributionCents,
+      name: investment.name.trim(),
+      return_rate_basis_points: investment.returnRateBasisPoints,
+      return_rate_period: investment.returnRatePeriod,
+      user_id: authenticatedUserId,
+    });
+
+    if (investmentInsertError) {
+      throw investmentInsertError;
+    }
+  }
+
+  return data as Goal;
+}
+
+export async function listGoalInvestments(goalIds: string[]): Promise<GoalInvestment[]> {
+  if (goalIds.length === 0) {
+    return [];
+  }
+
+  const client = requireSupabase();
+  const authenticatedUserId = await requireAuthenticatedUserId();
+
+  const { data, error } = await client
+    .from("goal_investments")
+    .select("*")
+    .eq("user_id", authenticatedUserId)
+    .in("goal_id", goalIds)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []) as GoalInvestment[];
+}
+
+export async function listMonthGoalInvestmentContributions(
+  budgetMonthId: string
+): Promise<GoalInvestmentContribution[]> {
+  const client = requireSupabase();
+  const authenticatedUserId = await requireAuthenticatedUserId();
+
+  const { data, error } = await client
+    .from("goal_investment_contributions")
+    .select("*")
+    .eq("user_id", authenticatedUserId)
+    .eq("budget_month_id", budgetMonthId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []) as GoalInvestmentContribution[];
+}
+
+export async function saveGoalInvestmentContribution(input: {
+  budgetMonthId: string;
+  confirmedAmountCents: number;
+  contributionDate: string;
+  goalId: string;
+  goalInvestmentId: string;
+  goalName: string;
+  plannedAmountCents: number;
+  status: "confirmed" | "skipped";
+}): Promise<void> {
+  const client = requireSupabase();
+  const authenticatedUserId = await requireAuthenticatedUserId();
+  const savingGoalThemeId = await getSavingGoalThemeId();
+
+  const { data: existingContribution, error: existingContributionError } = await client
+    .from("goal_investment_contributions")
+    .select("*")
+    .eq("user_id", authenticatedUserId)
+    .eq("budget_month_id", input.budgetMonthId)
+    .eq("goal_investment_id", input.goalInvestmentId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (existingContributionError) {
+    throw existingContributionError;
+  }
+
+  let monthlyThemeEntryId = existingContribution?.monthly_theme_entry_id ?? null;
+
+  if (input.status === "confirmed") {
+    if (monthlyThemeEntryId) {
+      const { error: entryUpdateError } = await client
+        .from("monthly_theme_entries")
+        .update({
+          amount_cents: input.confirmedAmountCents,
+          deleted_at: null,
+          deleted_reason: null,
+          description: `Aporte confirmado: ${input.goalName}`,
+          entry_date: input.contributionDate,
+          goal_id: input.goalId,
+          goal_investment_id: input.goalInvestmentId,
+          notes: "Aporte mensal confirmado pelo usuario.",
+          theme_id: savingGoalThemeId,
+          updated_at: new Date().toISOString(),
+          user_id: authenticatedUserId,
+          yield_percentage_bp: 0,
+        })
+        .eq("id", monthlyThemeEntryId);
+
+      if (entryUpdateError) {
+        throw entryUpdateError;
+      }
+    } else {
+      const { data: createdEntry, error: entryInsertError } = await client
+        .from("monthly_theme_entries")
+        .insert({
+          amount_cents: input.confirmedAmountCents,
+          budget_month_id: input.budgetMonthId,
+          description: `Aporte confirmado: ${input.goalName}`,
+          entry_date: input.contributionDate,
+          goal_id: input.goalId,
+          goal_investment_id: input.goalInvestmentId,
+          notes: "Aporte mensal confirmado pelo usuario.",
+          theme_id: savingGoalThemeId,
+          user_id: authenticatedUserId,
+          yield_percentage_bp: 0,
+        })
+        .select("id")
+        .single();
+
+      if (entryInsertError) {
+        throw entryInsertError;
+      }
+
+      monthlyThemeEntryId = createdEntry.id;
+    }
+  } else if (monthlyThemeEntryId) {
+    const { error: entrySoftDeleteError } = await client
+      .from("monthly_theme_entries")
+      .update({
+        deleted_at: new Date().toISOString(),
+        deleted_reason: "Aporte mensal marcado como nao realizado.",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", monthlyThemeEntryId)
+      .is("deleted_at", null);
+
+    if (entrySoftDeleteError) {
+      throw entrySoftDeleteError;
+    }
+  }
+
+  if (existingContribution) {
+    const { error: contributionUpdateError } = await client
+      .from("goal_investment_contributions")
+      .update({
+        confirmed_amount_cents:
+          input.status === "confirmed" ? input.confirmedAmountCents : 0,
+        confirmed_at:
+          input.status === "confirmed" ? new Date().toISOString() : null,
+        monthly_theme_entry_id:
+          input.status === "confirmed" ? monthlyThemeEntryId : existingContribution.monthly_theme_entry_id,
+        planned_amount_cents: input.plannedAmountCents,
+        status: input.status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", existingContribution.id);
+
+    if (contributionUpdateError) {
+      throw contributionUpdateError;
+    }
+
+    return;
+  }
+
+  const { error: contributionInsertError } = await client
+    .from("goal_investment_contributions")
+    .insert({
+      budget_month_id: input.budgetMonthId,
+      confirmed_amount_cents:
+        input.status === "confirmed" ? input.confirmedAmountCents : 0,
+      confirmed_at:
+        input.status === "confirmed" ? new Date().toISOString() : null,
+      goal_id: input.goalId,
+      goal_investment_id: input.goalInvestmentId,
+      monthly_theme_entry_id: input.status === "confirmed" ? monthlyThemeEntryId : null,
+      planned_amount_cents: input.plannedAmountCents,
+      status: input.status,
+      user_id: authenticatedUserId,
+    });
+
+  if (contributionInsertError) {
+    throw contributionInsertError;
+  }
 }
 
 export async function listAuditLogsForRecord(

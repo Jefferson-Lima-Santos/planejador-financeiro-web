@@ -5,7 +5,7 @@ import { AnimatedMonthSection } from "@/components/financialDashboard/AnimatedMo
 import { GoalsSection } from "@/components/financialDashboard/GoalsSection";
 import { MonthlyComparisonChart } from "@/components/financialDashboard/MonthlyComparisonChart";
 import { tokens } from "@/locales/tokens";
-import type { Goal, MonthlyComparison } from "@/types/finance";
+import type { Goal, GoalInvestment, MonthlyComparison } from "@/types/finance";
 
 type DashboardTotals = {
   balance: number;
@@ -21,6 +21,10 @@ type MonthlyDataSectionProps = {
   currentMonth: Dayjs;
   goals: Goal[];
   isLoading: boolean;
+  onAddGoal: () => void;
+  onContributionAction: (goal: Goal, investment: GoalInvestment, status: "confirmed" | "skipped") => void;
+  onEditGoal: (goal: Goal) => void;
+  isSaving?: boolean;
   totals: DashboardTotals;
 };
 
@@ -30,6 +34,10 @@ export const MonthlyDataSection = ({
   currentMonth,
   goals,
   isLoading,
+  onAddGoal,
+  onContributionAction,
+  onEditGoal,
+  isSaving,
   totals,
 }: MonthlyDataSectionProps) => {
   const { t } = useTranslation();
@@ -47,7 +55,14 @@ export const MonthlyDataSection = ({
           <Alert severity="success">{t(tokens.dashboard.statusOk)}</Alert>
         )}
 
-        <GoalsSection goals={goals} isLoading={isLoading} />
+        <GoalsSection
+          goals={goals}
+          isLoading={isLoading}
+          onAddGoal={onAddGoal}
+          onContributionAction={onContributionAction}
+          onEditGoal={onEditGoal}
+          isSaving={isSaving}
+        />
       </Stack>
     </AnimatedMonthSection>
   );

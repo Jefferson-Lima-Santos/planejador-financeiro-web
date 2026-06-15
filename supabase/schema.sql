@@ -96,6 +96,7 @@ create table if not exists public.monthly_theme_entries (
   notes text,
   yield_percentage_bp integer not null default 0 check (yield_percentage_bp >= 0),
   goal_id uuid,
+  goal_investment_id uuid,
   change_reason text,
   created_at timestamptz not null default now(),
   updated_at timestamptz,
@@ -122,6 +123,51 @@ create table if not exists public.goals (
   deleted_at timestamptz
 );
 
+create table if not exists public.goal_investments (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  goal_id uuid not null references public.goals(id) on delete cascade,
+  name text not null,
+  current_value_cents integer not null default 0 check (current_value_cents >= 0),
+  monthly_contribution_cents integer not null default 0 check (monthly_contribution_cents >= 0),
+  return_rate_basis_points integer not null default 0 check (return_rate_basis_points >= 0),
+  return_rate_period text not null default 'annual'
+    check (return_rate_period in ('monthly', 'annual')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz,
+  deleted_at timestamptz
+);
+
+create index if not exists idx_goal_investments_goal
+  on public.goal_investments(goal_id);
+
+create index if not exists idx_goal_investments_user_active
+  on public.goal_investments(user_id, deleted_at);
+
+create table if not exists public.goal_investment_contributions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  budget_month_id uuid not null references public.budget_months(id) on delete cascade,
+  goal_id uuid not null references public.goals(id) on delete cascade,
+  goal_investment_id uuid not null references public.goal_investments(id) on delete cascade,
+  planned_amount_cents integer not null default 0 check (planned_amount_cents >= 0),
+  confirmed_amount_cents integer not null default 0 check (confirmed_amount_cents >= 0),
+  status text not null default 'pending'
+    check (status in ('pending', 'confirmed', 'skipped')),
+  monthly_theme_entry_id uuid references public.monthly_theme_entries(id) on delete set null,
+  confirmed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz,
+  deleted_at timestamptz
+);
+
+create unique index if not exists idx_goal_investment_contributions_month_investment_active
+  on public.goal_investment_contributions(budget_month_id, goal_investment_id)
+  where deleted_at is null;
+
+create index if not exists idx_goal_investment_contributions_goal
+  on public.goal_investment_contributions(goal_id, budget_month_id);
+
 create table if not exists public.audit_logs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id),
@@ -144,6 +190,8 @@ alter table public.budget_themes enable row level security;
 alter table public.recurring_entries enable row level security;
 alter table public.monthly_theme_entries enable row level security;
 alter table public.goals enable row level security;
+alter table public.goal_investments enable row level security;
+alter table public.goal_investment_contributions enable row level security;
 alter table public.audit_logs enable row level security;
 
 alter table public.budget_months alter column user_id set default auth.uid();
@@ -158,8 +206,11 @@ alter table public.monthly_theme_entries add column if not exists recurring_entr
 alter table public.monthly_theme_entries add column if not exists change_reason text;
 alter table public.monthly_theme_entries add column if not exists yield_percentage_bp integer not null default 0 check (yield_percentage_bp >= 0);
 alter table public.monthly_theme_entries add column if not exists goal_id uuid references public.goals(id) on delete set null;
+alter table public.monthly_theme_entries add column if not exists goal_investment_id uuid references public.goal_investments(id) on delete set null;
 alter table public.budget_themes add column if not exists target_behavior text not null default 'expense_limit'
   check (target_behavior in ('expense_limit', 'saving_goal'));
+alter table public.goal_investments alter column user_id set default auth.uid();
+alter table public.goal_investment_contributions alter column user_id set default auth.uid();
 
 do $$
 begin
@@ -181,6 +232,16 @@ begin
     alter table public.recurring_entries
       add constraint recurring_entries_goal_id_fkey
       foreign key (goal_id) references public.goals(id) on delete set null;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'monthly_theme_entries_goal_investment_id_fkey'
+  ) then
+    alter table public.monthly_theme_entries
+      add constraint monthly_theme_entries_goal_investment_id_fkey
+      foreign key (goal_investment_id) references public.goal_investments(id) on delete set null;
   end if;
 end $$;
 alter table public.goals alter column user_id set default auth.uid();
@@ -249,6 +310,38 @@ create policy "goals_manage_own"
   on public.goals for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+drop policy if exists "goal_investments_manage_own" on public.goal_investments;
+create policy "goal_investments_manage_own"
+  on public.goal_investments for all
+  using (auth.uid() = user_id)
+  with check (
+    auth.uid() = user_id
+    and exists (
+      select 1
+      from public.goals g
+      where g.id = goal_id
+        and g.user_id = auth.uid()
+        and g.deleted_at is null
+    )
+  );
+
+drop policy if exists "goal_investment_contributions_manage_own" on public.goal_investment_contributions;
+create policy "goal_investment_contributions_manage_own"
+  on public.goal_investment_contributions for all
+  using (auth.uid() = user_id)
+  with check (
+    auth.uid() = user_id
+    and exists (
+      select 1
+      from public.goal_investments gi
+      join public.goals g on g.id = gi.goal_id
+      where gi.id = goal_investment_id
+        and g.user_id = auth.uid()
+        and g.deleted_at is null
+        and gi.deleted_at is null
+    )
+  );
 
 drop policy if exists "audit_logs_select_own" on public.audit_logs;
 create policy "audit_logs_select_own"
@@ -358,6 +451,16 @@ create trigger audit_monthly_theme_entries
 drop trigger if exists audit_goals on public.goals;
 create trigger audit_goals
   after insert or update or delete on public.goals
+  for each row execute function public.audit_row_changes();
+
+drop trigger if exists audit_goal_investments on public.goal_investments;
+create trigger audit_goal_investments
+  after insert or update or delete on public.goal_investments
+  for each row execute function public.audit_row_changes();
+
+drop trigger if exists audit_goal_investment_contributions on public.goal_investment_contributions;
+create trigger audit_goal_investment_contributions
+  after insert or update or delete on public.goal_investment_contributions
   for each row execute function public.audit_row_changes();
 
 insert into public.budget_themes

@@ -15,7 +15,10 @@ export const currencyInputToCents = (value: string): number => {
 };
 
 export const centsToInputValue = (value: number): string =>
-  (value / 100).toFixed(2).replace(".", ",");
+  (value / 100).toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
 export const formatCurrencyInput = (value: string): string => {
   const digits = value.replace(/\D/g, "");
