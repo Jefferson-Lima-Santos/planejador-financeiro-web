@@ -160,12 +160,16 @@ export const GoalsSection = ({
                         goal.target_value_cents) *
                         100, 100)
                     : 0;
+                const requiredMonthlyContributionCents =
+                  goal.required_monthly_contribution_cents ?? null;
+                const requiredAdditionalMonthlyContributionCents =
+                  goal.required_additional_monthly_contribution_cents ?? null;
                 const investments = goal.investments ?? [];
                 const additionalPerInvestmentCents =
-                  goal.required_additional_monthly_contribution_cents &&
+                  requiredAdditionalMonthlyContributionCents &&
                   investments.length > 0
                     ? Math.ceil(
-                        goal.required_additional_monthly_contribution_cents /
+                        requiredAdditionalMonthlyContributionCents /
                           investments.length
                       )
                     : 0;
@@ -267,16 +271,16 @@ export const GoalsSection = ({
                             />
                             <SummaryMetric
                               label={t(tokens.dashboard.goalRequiredMonthly)}
-                              value={goal.required_monthly_contribution_cents === null
+                              value={requiredMonthlyContributionCents === null
                                 ? "-"
-                                : centsToCurrency(goal.required_monthly_contribution_cents)}
+                                : centsToCurrency(requiredMonthlyContributionCents)}
                             />
                             <SummaryMetric
                               label={t(tokens.dashboard.goalAdditionalMonthly)}
-                              value={goal.required_additional_monthly_contribution_cents === null
+                              value={requiredAdditionalMonthlyContributionCents === null
                                 ? "-"
                                 : centsToCurrency(
-                                    goal.required_additional_monthly_contribution_cents
+                                    requiredAdditionalMonthlyContributionCents
                                   )}
                             />
                           </Stack>
