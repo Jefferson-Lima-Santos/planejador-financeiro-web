@@ -282,24 +282,39 @@ export const GoalsSection = ({
                           <Stack flex={1} spacing={1.5}>
                             <Alert severity={alertProps.severity}>{alertProps.message}</Alert>
 
-                            {additionalPerInvestmentCents > 0 && (
-                              <Typography color="text.secondary" variant="body2">
-                                {t(tokens.dashboard.goalProjectionSplitHint, {
-                                  value: centsToCurrency(additionalPerInvestmentCents),
-                                })}
+                            <Box
+                              sx={{
+                                bgcolor: "rgba(37, 99, 235, 0.08)",
+                                border: "1px solid",
+                                borderColor: "primary.light",
+                                borderRadius: 2,
+                                p: 1.5,
+                              }}
+                            >
+                              <Typography
+                                color="primary.main"
+                                fontWeight={800}
+                                variant="h3"
+                              >
+                                {goal.target_date
+                                  ? t(tokens.dashboard.goalProjectedValueMessage, {
+                                      date: dayjs(goal.target_date).format("DD/MM/YYYY"),
+                                      value: centsToCurrency(
+                                        goal.projected_value_cents ??
+                                          goal.current_value_cents
+                                      ),
+                                    })
+                                  : t(tokens.dashboard.goalProjectedValue)}
                               </Typography>
-                            )}
 
-                            {goal.target_date && (
-                              <Typography color="text.secondary" variant="body2">
-                                {t(tokens.dashboard.goalProjectedValueMessage, {
-                                  date: dayjs(goal.target_date).format("DD/MM/YYYY"),
-                                  value: centsToCurrency(
-                                    goal.projected_value_cents ?? goal.current_value_cents
-                                  ),
-                                })}
-                              </Typography>
-                            )}
+                              {additionalPerInvestmentCents > 0 && (
+                                <Typography color="text.secondary" sx={{ mt: 0.75 }} variant="body2">
+                                  {t(tokens.dashboard.goalProjectionSplitHint, {
+                                    value: centsToCurrency(additionalPerInvestmentCents),
+                                  })}
+                                </Typography>
+                              )}
+                            </Box>
 
                             {investments.length === 0 ? (
                               <Alert severity="info">
@@ -413,20 +428,22 @@ export const GoalsSection = ({
                                             >
                                               {t(tokens.dashboard.goalInvestmentConfirmMonth)}
                                             </Button>
-                                            <Button
-                                              disabled={isSaving}
-                                              onClick={() =>
-                                                onContributionAction(
-                                                  goal,
-                                                  investment,
-                                                  "skipped"
-                                                )
-                                              }
-                                              size="small"
-                                              variant="outlined"
-                                            >
-                                              {t(tokens.dashboard.goalInvestmentNotDone)}
-                                            </Button>
+                                            {investment.contribution?.status !== "skipped" && (
+                                              <Button
+                                                disabled={isSaving}
+                                                onClick={() =>
+                                                  onContributionAction(
+                                                    goal,
+                                                    investment,
+                                                    "skipped"
+                                                  )
+                                                }
+                                                size="small"
+                                                variant="outlined"
+                                              >
+                                                {t(tokens.dashboard.goalInvestmentNotDone)}
+                                              </Button>
+                                            )}
                                           </Stack>
                                         </Stack>
                                       </Stack>

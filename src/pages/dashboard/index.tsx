@@ -57,6 +57,7 @@ import {
   createEntry,
   createIncomeEntry,
   ensureBudgetMonth,
+  ensureGoalInvestmentContributionsForMonth,
   getRecurringEntry,
   listGoalInvestments,
   listMonthGoalInvestmentContributions,
@@ -426,10 +427,15 @@ function FinancialDashboard() {
         listMonthGoals(month.id),
         listMonthlyComparisons(currentMonth.year(), currentMonth.month() + 1),
       ]);
-      const [goalInvestments, goalContributions] = await Promise.all([
-        listGoalInvestments(goalRows.map((goal) => goal.id)),
-        listMonthGoalInvestmentContributions(month.id),
-      ]);
+      const goalInvestments = await listGoalInvestments(goalRows.map((goal) => goal.id));
+      await ensureGoalInvestmentContributionsForMonth({
+        budgetMonthId: month.id,
+        goalInvestments,
+        goals: goalRows,
+        month: currentMonth.month() + 1,
+        year: currentMonth.year(),
+      });
+      const goalContributions = await listMonthGoalInvestmentContributions(month.id);
       const goalsWithInvestments = goalRows.map((goal) => ({
         ...goal,
         investments: goalInvestments
@@ -593,19 +599,35 @@ function FinancialDashboard() {
     [activeIncomeEntries]
   );
 
-  const themeSummaries = useMemo<ThemeSummary[]>(() => {
-    const manualGoalBaseCents = goals.reduce(
-      (sum, goal) => sum + goal.current_value_cents,
-      0
-    );
+  const goalsWithSavings = useMemo<Goal[]>(() => {
+    return goals.map((goal) => {
+      const linkedSavings = activeEntries
+        .filter((entry) => entry.goal_id === goal.id)
+        .reduce((sum, entry) => sum + entry.amount_cents, 0);
 
+      return buildGoalProjection(goal, linkedSavings, goal.investments ?? []);
+    });
+  }, [activeEntries, goals]);
+
+  const savingGoalBaseCents = useMemo(
+    () =>
+      goalsWithSavings.reduce((sum, goal) => {
+        const totalSavedCents = goal.total_saved_cents ?? goal.current_value_cents;
+        const linkedSavingsCents = goal.linked_savings_cents ?? 0;
+
+        return sum + Math.max(totalSavedCents - linkedSavingsCents, 0);
+      }, 0),
+    [goalsWithSavings]
+  );
+
+  const themeSummaries = useMemo<ThemeSummary[]>(() => {
     return themes.map((theme) => {
       const entryTotal = activeEntries
         .filter((entry) => entry.theme_id === theme.id)
         .reduce((sum, entry) => sum + entry.amount_cents, 0);
       const total =
         theme.target_behavior === "saving_goal"
-          ? entryTotal + manualGoalBaseCents
+          ? entryTotal + savingGoalBaseCents
           : entryTotal;
       const recommended = Math.round(
         (incomeTotalCents * theme.default_percentage_bp) / 10000
@@ -620,17 +642,7 @@ function FinancialDashboard() {
         total_cents: total,
       };
     });
-  }, [activeEntries, goals, incomeTotalCents, themes]);
-
-  const goalsWithSavings = useMemo<Goal[]>(() => {
-    return goals.map((goal) => {
-      const linkedSavings = activeEntries
-        .filter((entry) => entry.goal_id === goal.id)
-        .reduce((sum, entry) => sum + entry.amount_cents, 0);
-
-      return buildGoalProjection(goal, linkedSavings, goal.investments ?? []);
-    });
-  }, [activeEntries, goals]);
+  }, [activeEntries, incomeTotalCents, savingGoalBaseCents, themes]);
 
   const totals = useMemo(() => {
     const spent = activeEntries.reduce((sum, entry) => sum + entry.amount_cents, 0);

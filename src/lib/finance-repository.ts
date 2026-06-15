@@ -1,3 +1,4 @@
+import dayjs from "dayjs";
 import { supabase } from "@/lib/supabase";
 import type {
   AuditLog,
@@ -531,6 +532,55 @@ export async function listMonthGoalInvestmentContributions(
   }
 
   return (data ?? []) as GoalInvestmentContribution[];
+}
+
+export async function ensureGoalInvestmentContributionsForMonth(input: {
+  budgetMonthId: string;
+  goalInvestments: GoalInvestment[];
+  goals: Goal[];
+  month: number;
+  year: number;
+}): Promise<void> {
+  const existingContributions = await listMonthGoalInvestmentContributions(input.budgetMonthId);
+
+  for (const investment of input.goalInvestments) {
+    if (investment.monthly_contribution_cents <= 0) {
+      continue;
+    }
+
+    const createdAt = dayjs(investment.created_at);
+    const wasCreatedInSelectedMonth =
+      createdAt.year() === input.year && createdAt.month() + 1 === input.month;
+
+    if (!wasCreatedInSelectedMonth) {
+      continue;
+    }
+
+    const alreadyExists = existingContributions.some(
+      (contribution) => contribution.goal_investment_id === investment.id
+    );
+
+    if (alreadyExists) {
+      continue;
+    }
+
+    const goal = input.goals.find((goalItem) => goalItem.id === investment.goal_id);
+
+    if (!goal) {
+      continue;
+    }
+
+    await saveGoalInvestmentContribution({
+      budgetMonthId: input.budgetMonthId,
+      confirmedAmountCents: investment.monthly_contribution_cents,
+      contributionDate: createdAt.format("YYYY-MM-DD"),
+      goalId: goal.id,
+      goalInvestmentId: investment.id,
+      goalName: goal.name,
+      plannedAmountCents: investment.monthly_contribution_cents,
+      status: "confirmed",
+    });
+  }
 }
 
 export async function saveGoalInvestmentContribution(input: {
