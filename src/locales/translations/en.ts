@@ -145,13 +145,9 @@ export const en = {
   [tokens.dashboard.goalRequiredMonthly]: "Recommended total monthly contribution",
   [tokens.dashboard.goalAdditionalMonthly]: "Additional monthly amount needed",
   [tokens.dashboard.goalMonthsLeft]: "{{count}} month left",
-  [tokens.dashboard.goalMonthsLeft_plural]: "{{count}} months left",
   [tokens.dashboard.goalRemainingMonthUnit]: "{{count}} month",
-  [tokens.dashboard.goalRemainingMonthUnit_plural]: "{{count}} months",
   [tokens.dashboard.goalRemainingYearUnit]: "{{count}} year",
-  [tokens.dashboard.goalRemainingYearUnit_plural]: "{{count}} years",
   [tokens.dashboard.goalRemainingSuffix]: "left",
-  [tokens.dashboard.goalRemainingSuffix_plural]: "left",
   [tokens.dashboard.goalProjectionMissingDate]:
     "Set a target date so the planner can calculate the monthly contribution needed.",
   [tokens.dashboard.goalProjectionExpired]:

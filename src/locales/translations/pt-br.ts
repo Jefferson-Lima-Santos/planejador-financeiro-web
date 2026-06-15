@@ -145,13 +145,9 @@ export const ptBR = {
   [tokens.dashboard.goalRequiredMonthly]: "Aporte mensal total recomendado",
   [tokens.dashboard.goalAdditionalMonthly]: "Aporte extra necessário",
   [tokens.dashboard.goalMonthsLeft]: "{{count}} mês restante",
-  [tokens.dashboard.goalMonthsLeft_plural]: "{{count}} meses restantes",
   [tokens.dashboard.goalRemainingMonthUnit]: "{{count}} mês",
-  [tokens.dashboard.goalRemainingMonthUnit_plural]: "{{count}} meses",
   [tokens.dashboard.goalRemainingYearUnit]: "{{count}} ano",
-  [tokens.dashboard.goalRemainingYearUnit_plural]: "{{count}} anos",
   [tokens.dashboard.goalRemainingSuffix]: "restante",
-  [tokens.dashboard.goalRemainingSuffix_plural]: "restantes",
   [tokens.dashboard.goalProjectionMissingDate]:
     "Defina uma data alvo para o sistema calcular quanto aportar por mês.",
   [tokens.dashboard.goalProjectionExpired]:
