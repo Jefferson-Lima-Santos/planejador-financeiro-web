@@ -91,6 +91,8 @@ export const en = {
   [tokens.dashboard.expenseLimitSubtitle]:
     "Compare each theme with the recommended value for the month.",
   [tokens.dashboard.expenseLimitTitle]: "Recommended usage",
+  [tokens.dashboard.expenseLimitCapHint]:
+    "Values above 200% are capped in the chart; hover to see the real percentage.",
   [tokens.dashboard.expenseStatusCritical]: "Way over",
   [tokens.dashboard.expenseStatusOk]: "Within limit",
   [tokens.dashboard.expenseStatusOver]: "Over limit",

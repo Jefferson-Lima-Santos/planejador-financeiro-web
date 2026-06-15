@@ -92,6 +92,8 @@ export const ptBR = {
   [tokens.dashboard.expenseLimitSubtitle]:
     "Compare cada tema com o valor recomendado para o mês.",
   [tokens.dashboard.expenseLimitTitle]: "Uso do recomendado",
+  [tokens.dashboard.expenseLimitCapHint]:
+    "Valores acima de 200% aparecem limitados no grafico; passe o mouse para ver o percentual real.",
   [tokens.dashboard.expenseStatusCritical]: "Passou muito",
   [tokens.dashboard.expenseStatusOk]: "Dentro do limite",
   [tokens.dashboard.expenseStatusOver]: "Passou do limite",

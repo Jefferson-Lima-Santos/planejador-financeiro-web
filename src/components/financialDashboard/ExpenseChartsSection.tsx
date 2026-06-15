@@ -22,6 +22,8 @@ type ExpenseChartsSectionProps = {
   themeSummaries: ThemeSummary[];
 };
 
+const USAGE_CHART_CAP = 200;
+
 export const ExpenseChartsSection = ({
   isLoading,
   themeSummaries,
@@ -46,11 +48,12 @@ export const ExpenseChartsSection = ({
 
     return {
       color: expenseHealthColors[getExpenseHealth(summary)].main,
-      displayUsage: usage === 0 ? 3 : usage,
+      displayUsage: usage === 0 ? 3 : Math.min(usage, USAGE_CHART_CAP),
       name: summary.name,
       usage,
     };
   });
+  const hasCappedUsage = usageData.some((entry) => entry.usage > USAGE_CHART_CAP);
 
   if (isLoading) {
     return (
@@ -186,8 +189,12 @@ export const ExpenseChartsSection = ({
                     tickLine={false}
                   />
                   <YAxis
+                    domain={[0, USAGE_CHART_CAP]}
                     tick={{ fontSize: 11 }}
-                    tickFormatter={(value) => `${value}%`}
+                    ticks={[0, 50, 100, 150, USAGE_CHART_CAP]}
+                    tickFormatter={(value) =>
+                      value >= USAGE_CHART_CAP ? `${USAGE_CHART_CAP}%+` : `${value}%`
+                    }
                     tickLine={false}
                   />
                   <RechartsTooltip
@@ -206,6 +213,11 @@ export const ExpenseChartsSection = ({
                 </BarChart>
               </ResponsiveContainer>
             </Box>
+            {hasCappedUsage && (
+              <Typography color="text.secondary" variant="caption">
+                {t(tokens.dashboard.expenseLimitCapHint)}
+              </Typography>
+            )}
           </Stack>
         </CardContent>
       </Card>

@@ -85,6 +85,7 @@ export const tokens = {
     expensesByThemeSubtitle: "dashboard.expensesByThemeSubtitle",
     expenseDistributionSubtitle: "dashboard.expenseDistributionSubtitle",
     expenseDistributionTitle: "dashboard.expenseDistributionTitle",
+    expenseLimitCapHint: "dashboard.expenseLimitCapHint",
     expenseLimitSubtitle: "dashboard.expenseLimitSubtitle",
     expenseLimitTitle: "dashboard.expenseLimitTitle",
     expenseStatusCritical: "dashboard.expenseStatusCritical",
